@@ -1,99 +1,109 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import QRCode from 'react-qr-code';
+import { useNavigate } from 'react-router-dom';
+import { useCart } from '../hooks/useCart';
 import { formatPrice } from '../utils/formatPrice';
-import CartTable from '../components/cart/CartTable';
-import type { CartItem } from '../context/CartTypes';
-import { generatePixPayload } from '../utils/pixPayload';
+import { calcularFreteComBaseEmCarrinho } from '../utils/freteUtils';
+import { generatePixPayload } from '../utils/pixPayload'
 
 const PixPaymentPage = () => {
+  const { getCart } = useCart();
   const navigate = useNavigate();
-  const { state } = useLocation();
-  const { cartItems, total, shipping } = state || {};
+  const cartItems = getCart();
 
-  const [payload, setPayload] = useState('');
+  const [frete, setFrete] = useState(0);
+  const [pixPayload, setPixPayload] = useState('');
+
+  const totalProdutos = cartItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
+  const totalComFrete = totalProdutos + frete;
 
   useEffect(() => {
-    if (!cartItems || cartItems.length === 0) return;
+    const savedForm = localStorage.getItem('checkoutForm');
+    if (!savedForm) return;
 
-    const totalComFrete = Math.round((total + shipping) * 100) / 100;
+    const form = JSON.parse(savedForm);
+    calcularFreteComBaseEmCarrinho(
+      { cep: form.cep, cpf: form.cpf },
+      cartItems
+    )
+      .then(setFrete)
+      .catch(() => setFrete(0));
+  }, [cartItems]);
 
-    const pixPayload = generatePixPayload({
-      key: '29322022000',
-      name: 'Agenor Gasparetto',
+  useEffect(() => {
+    if (totalComFrete === 0) return;
+
+    const payload = generatePixPayload({
+      key: '29322022000', // Chave Pix (CPF, telefone, e-mail ou aleatória)
+      name: 'AGENOR GASPARETTO',
       city: 'ITABUNA',
       amount: totalComFrete,
     });
 
-    setPayload(pixPayload);
-  }, [cartItems, total, shipping]);
+    setPixPayload(payload);
+  }, [totalComFrete]);
 
-  const handleQuantityChange = (itemId: string, amount: number) => {
-    const updated = cartItems
-      .map((item: CartItem) =>
-        item.id === itemId ? { ...item, quantity: Math.max(0, item.quantity + amount) } : item
-      )
-      .filter((item: CartItem) => item.quantity > 0);
-
-    localStorage.setItem('cart', JSON.stringify(updated));
-    window.location.reload(); // recarrega para atualizar o Pix
+  const handleReviewClick = () => {
+    navigate('/checkout');
   };
-
-  const handleRemoveItem = (itemId: string) => {
-    const updated = cartItems.filter((item: CartItem) => item.id !== itemId);
-    localStorage.setItem('cart', JSON.stringify(updated));
-    window.location.reload(); // recarrega para atualizar o Pix
-  };
-
-  if (!cartItems || cartItems.length === 0 || !payload) {
-    return (
-      <div className="max-w-3xl mx-auto p-8 text-center">
-        <h1 className="text-xl font-bold text-red-600">Carrinho vazio</h1>
-        <p className="mt-4">Adicione produtos ao carrinho antes de pagar com Pix.</p>
-        <button
-          className="mt-6 bg-gray-300 text-gray-800 px-4 py-2 rounded hover:bg-gray-400"
-          onClick={() => navigate('/books')}
-        >
-          Voltar para a loja
-        </button>
-      </div>
-    );
-  }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 text-center">
-      <h1 className="text-2xl font-bold mb-4">Pagamento via Pix</h1>
+    <div className="max-w-3xl mx-auto p-6">
+      <h2 className="text-2xl font-semibold mb-4">Resumo da Compra (Pix)</h2>
 
-      <p className="text-sm text-red-600 mb-4">Aceitamos apenas Pix como forma de pagamento.</p>
-
-      <div className="mb-8">
-        <CartTable
-          items={cartItems}
-          onQuantityChange={handleQuantityChange}
-          onRemoveItem={handleRemoveItem}
-        />
-        <div className="text-right pr-4">
-          <p className="text-sm">Frete: {formatPrice(shipping)}</p>
-          <p className="text-xl font-bold">Total: {formatPrice(total)}</p>
-        </div>
+      <div className="space-y-4">
+        {cartItems.map((item) => (
+          <div
+            key={item.id}
+            className="border p-4 rounded shadow-sm flex gap-4 items-center"
+          >
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="w-24 h-auto object-contain"
+            />
+            <div>
+              <p className="font-medium">{item.title}</p>
+              <p>Quantidade: {item.quantity}</p>
+              <p>Preço unitário: {formatPrice(item.price)}</p>
+              <p>Subtotal: {formatPrice(item.price * item.quantity)}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="inline-block bg-white p-4 rounded shadow-md mb-6">
-        <QRCode value={payload} size={200} />
+      <div className="mt-6 text-right space-y-2">
+        <p className="text-lg">Subtotal: {formatPrice(totalProdutos)}</p>
+        <p className="text-lg">Frete: {formatPrice(frete)}</p>
+        <p className="text-xl font-bold">
+          Total com Frete: {formatPrice(totalComFrete)}
+        </p>
       </div>
 
-      <p className="text-base font-medium mb-6">
-        Escaneie o QR Code ou copie o código para pagar via Pix.
-      </p>
-
-      <div className="flex justify-center">
+      <div className="mt-8 flex justify-between">
         <button
-          onClick={() => navigate('/books')}
-          className="px-6 py-2 bg-green-600 text-white rounded-md shadow-md transition hover:bg-green-700"
+          onClick={handleReviewClick}
+          className="bg-gray-300 hover:bg-gray-400 text-black px-4 py-2 rounded"
         >
-          Continuar comprando
+          Revisar compra
         </button>
       </div>
+
+      {pixPayload && (
+        <div className="mt-10 text-center">
+          <p className="text-lg mb-2 font-medium">Escaneie o QR Code com seu app de banco:</p>
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
+              pixPayload
+            )}`}
+            alt="QR Code Pix"
+            className="mx-auto"
+          />
+          <p className="mt-4 text-sm text-gray-500 break-words">{pixPayload}</p>
+        </div>
+      )}
     </div>
   );
 };
