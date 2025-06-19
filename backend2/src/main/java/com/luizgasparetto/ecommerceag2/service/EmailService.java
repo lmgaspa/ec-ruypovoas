@@ -14,7 +14,7 @@ public class EmailService {
 
     public void sendPurchaseEmail(PurchaseMessage message) {
         SimpleMailMessage email = new SimpleMailMessage();
-        email.setTo("luhmgasparetto@gmail.com");
+        email.setTo("ag1957@gmail.com");
         email.setSubject("📘 Nova compra recebida");
 
         StringBuilder livrosVendidos = new StringBuilder();
