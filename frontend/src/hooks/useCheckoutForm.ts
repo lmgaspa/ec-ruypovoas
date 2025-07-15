@@ -18,7 +18,7 @@ export const useCheckoutForm = () => {
     email: '',
     observacao: '',
     entrega: '',
-    pagamento: 'boleto',
+    pagamento: 'pix',
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
