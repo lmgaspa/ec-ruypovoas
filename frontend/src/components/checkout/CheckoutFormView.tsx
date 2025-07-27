@@ -61,7 +61,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         <div className="grid grid-cols-2 gap-4">
           <input name="firstName" value={form.firstName} onChange={handleChange} placeholder="Nome" className="border p-2" />
           <input name="lastName" value={form.lastName} onChange={handleChange} placeholder="Sobrenome" className="border p-2" />
-          <input name="cpf" value={form.cpf} onChange={handleChange} placeholder="CPF (opcional)" className="border p-2 col-span-2" />
+          <input name="cpf" value={form.cpf} onChange={handleChange} placeholder="CPF" className="border p-2 col-span-2" />
           <input value="Brasil" disabled className="border p-2 col-span-2" />
           <input name="cep" value={form.cep} onChange={handleChange} placeholder="CEP (Ex: 00000-000)" className="border p-2 col-span-2" />
           <input name="address" value={form.address} onChange={handleChange} placeholder="Endereço" className="border p-2 col-span-2" />
