@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { useCart } from '../hooks/useCart';
 import { formatPrice } from '../utils/formatPrice';
 import { calcularFreteComBaseEmCarrinho } from '../utils/freteUtils';
-import { generatePixPayload } from '../utils/pixPayload'
 
 const PixPaymentPage = () => {
   const { getCart } = useCart();
@@ -11,7 +10,8 @@ const PixPaymentPage = () => {
   const cartItems = getCart();
 
   const [frete, setFrete] = useState(0);
-  const [pixPayload, setPixPayload] = useState('');
+  const [qrCodeBase64, setQrCodeBase64] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const totalProdutos = cartItems.reduce(
     (sum, item) => sum + item.price * item.quantity,
@@ -33,17 +33,37 @@ const PixPaymentPage = () => {
   }, [cartItems]);
 
   useEffect(() => {
-    if (totalComFrete === 0) return;
+    const savedForm = localStorage.getItem('checkoutForm');
+    if (!savedForm || cartItems.length === 0) return;
 
-    const payload = generatePixPayload({
-      key: '29322022000', // Chave Pix (CPF, telefone, e-mail ou aleatória)
-      name: 'AGENOR GASPARETTO',
-      city: 'ITABUNA',
-      amount: totalComFrete,
-    });
+    const form = JSON.parse(savedForm);
+    setLoading(true);
 
-    setPixPayload(payload);
-  }, [totalComFrete]);
+    fetch('https://ecommerceag-6fa0e6a5edbf.herokuapp.com/api/checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        address: form.address,
+        city: form.city,
+        state: form.state,
+        cep: form.cep,
+        shipping: frete,
+        total: totalProdutos,
+        cartItems
+      })
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        setQrCodeBase64(data.qrCodeBase64);
+      })
+      .catch((err) => {
+        console.error('Erro ao gerar pagamento Pix:', err);
+      })
+      .finally(() => setLoading(false));
+  }, [frete]);
 
   const handleReviewClick = () => {
     navigate('/checkout');
@@ -91,17 +111,18 @@ const PixPaymentPage = () => {
         </button>
       </div>
 
-      {pixPayload && (
+      {loading && (
+        <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>
+      )}
+
+      {qrCodeBase64 && (
         <div className="mt-10 text-center">
           <p className="text-lg mb-2 font-medium">Escaneie o QR Code com seu app de banco:</p>
           <img
-            src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(
-              pixPayload
-            )}`}
+            src={`data:image/png;base64,${qrCodeBase64}`}
             alt="QR Code Pix"
             className="mx-auto"
           />
-          <p className="mt-4 text-sm text-gray-500 break-words">{pixPayload}</p>
         </div>
       )}
     </div>

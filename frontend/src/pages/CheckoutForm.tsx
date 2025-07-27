@@ -24,6 +24,7 @@ const CheckoutForm = (props: CheckoutFormProps) => {
     const requiredFields: (keyof CheckoutFormData)[] = [
       "firstName",
       "lastName",
+      "cpf",
       "cep",
       "address",
       "number",

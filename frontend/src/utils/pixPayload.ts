@@ -1,5 +1,5 @@
 interface PixPayloadParams {
-  key: string; // chave Pix (email, telefone, CPF ou aleatória)
+  key: string; // chave Pix (email, telefone,  ou aleatória)
   name: string;
   city: string;
   amount: number;
