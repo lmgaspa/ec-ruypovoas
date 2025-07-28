@@ -36,6 +36,7 @@ const PixPaymentPage = () => {
     }
   }, []);
 
+  // Calcula frete com base no form + carrinho
   useEffect(() => {
     const savedForm = localStorage.getItem('checkoutForm');
     if (!savedForm || cartItems.length === 0) return;
