@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useCart } from '../hooks/useCart';
 import { formatPrice } from '../utils/formatPrice';
 import { calcularFreteComBaseEmCarrinho } from '../utils/freteUtils';
 import type { CartItem } from '../context/CartTypes';
 
 const PixPaymentPage = () => {
+  const { getCart } = useCart();
   const navigate = useNavigate();
 
+  // Inicializa com carrinho salvo, se houver
   const initialCart = (() => {
     const stored = localStorage.getItem('cart');
     return stored ? JSON.parse(stored) : [];
@@ -23,6 +26,7 @@ const PixPaymentPage = () => {
   );
   const totalComFrete = totalProdutos + frete;
 
+  // Garante que cartItems não esteja vazio após refresh
   useEffect(() => {
     if (cartItems.length === 0) {
       const stored = localStorage.getItem('cart');
@@ -30,7 +34,7 @@ const PixPaymentPage = () => {
         setCartItems(JSON.parse(stored));
       }
     }
-  }, [cartItems.length]);
+  }, []);
 
   useEffect(() => {
     const savedForm = localStorage.getItem('checkoutForm');
@@ -89,7 +93,9 @@ const PixPaymentPage = () => {
       .then((data) => {
         setQrCodeBase64(data.qrCodeBase64);
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.error('Erro ao gerar pagamento Pix:', err);
+      })
       .finally(() => setLoading(false));
   }, [frete, cartItems, navigate]);
 
