@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCart } from '../hooks/useCart';
 import { formatPrice } from '../utils/formatPrice';
 import { calcularFreteComBaseEmCarrinho } from '../utils/freteUtils';
+import type { CartItem } from '../context/CartTypes';
 
 const PixPaymentPage = () => {
-  const { getCart } = useCart();
   const navigate = useNavigate();
-  const cartItems = getCart();
 
+  const initialCart = (() => {
+    const stored = localStorage.getItem('cart');
+    return stored ? JSON.parse(stored) : [];
+  })();
+
+  const [cartItems, setCartItems] = useState<CartItem[]>(initialCart);
   const [frete, setFrete] = useState(0);
   const [qrCodeBase64, setQrCodeBase64] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,8 +24,17 @@ const PixPaymentPage = () => {
   const totalComFrete = totalProdutos + frete;
 
   useEffect(() => {
+    if (cartItems.length === 0) {
+      const stored = localStorage.getItem('cart');
+      if (stored) {
+        setCartItems(JSON.parse(stored));
+      }
+    }
+  }, [cartItems.length]);
+
+  useEffect(() => {
     const savedForm = localStorage.getItem('checkoutForm');
-    if (!savedForm) return;
+    if (!savedForm || cartItems.length === 0) return;
 
     const form = JSON.parse(savedForm);
     calcularFreteComBaseEmCarrinho(
@@ -34,9 +47,17 @@ const PixPaymentPage = () => {
 
   useEffect(() => {
     const savedForm = localStorage.getItem('checkoutForm');
-    if (!savedForm || cartItems.length === 0) return;
+    if (!savedForm || cartItems.length === 0) {
+      navigate('/checkout');
+      return;
+    }
 
     const form = JSON.parse(savedForm);
+    const total = cartItems.reduce(
+      (sum, item) => sum + item.price * item.quantity,
+      0
+    );
+
     setLoading(true);
 
     fetch('https://ecommerceag-6fa0e6a5edbf.herokuapp.com/api/checkout', {
@@ -60,19 +81,17 @@ const PixPaymentPage = () => {
         note: form.note,
         deliver: form.delivery,
         payment: form.payment,
-        total: totalProdutos,
-        cartItems
-      })
+        total,
+        cartItems,
+      }),
     })
       .then((res) => res.json())
       .then((data) => {
         setQrCodeBase64(data.qrCodeBase64);
       })
-      .catch((err) => {
-        console.error('Erro ao gerar pagamento Pix:', err);
-      })
+      .catch(() => {})
       .finally(() => setLoading(false));
-  }, [frete]);
+  }, [frete, cartItems, navigate]);
 
   const handleReviewClick = () => {
     navigate('/checkout');
@@ -126,7 +145,9 @@ const PixPaymentPage = () => {
 
       {qrCodeBase64 && (
         <div className="mt-10 text-center">
-          <p className="text-lg mb-2 font-medium">Escaneie o QR Code com seu app de banco:</p>
+          <p className="text-lg mb-2 font-medium">
+            Escaneie o QR Code com seu app de banco:
+          </p>
           <img
             src={`data:image/png;base64,${qrCodeBase64}`}
             alt="QR Code Pix"

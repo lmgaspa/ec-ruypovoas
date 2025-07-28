@@ -112,7 +112,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
 
         <div className="flex justify-between font-bold">
           <span>Total</span>
-          <span>{formatPrice(total + shipping)}</span>
+          <span>{formatPrice(total)}</span>
         </div>
 
         <p className="text-xs text-center text-red-600 mt-4">
