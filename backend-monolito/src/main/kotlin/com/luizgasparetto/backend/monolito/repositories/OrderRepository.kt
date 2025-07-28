@@ -4,4 +4,4 @@ import com.luizgasparetto.backend.monolito.models.Order
 import org.springframework.data.jpa.repository.JpaRepository
 import java.util.*
 
-interface OrderRepository : JpaRepository<Order, UUID>
+interface OrderRepository : JpaRepository<Order, String>

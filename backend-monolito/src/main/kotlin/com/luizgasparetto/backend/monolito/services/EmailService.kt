@@ -28,7 +28,7 @@ class EmailService(private val mailSender: JavaMailSender) {
 
     private fun buildClientMessage(order: Order): String {
         val total = "R$ %.2f".format(order.total)
-        val shipping = "R$ %.2f".format(order.shipping)
+        val shippingLine = if (order.shipping > 0.0) "Frete: R$ %.2f\n".format(order.shipping) else ""
 
         return """
             Olá ${order.firstName},
@@ -39,8 +39,8 @@ class EmailService(private val mailSender: JavaMailSender) {
             "- ${it.title} (${it.quantity}x) – R$%.2f".format(it.price)
         }}
 
+            $shippingLine
             Total: $total
-            Frete: $shipping
             Pagamento: Pix
 
             Obrigado por comprar conosco!
@@ -49,7 +49,7 @@ class EmailService(private val mailSender: JavaMailSender) {
 
     private fun buildAuthorMessage(order: Order): String {
         val total = "R$ %.2f".format(order.total)
-        val shipping = "R$ %.2f".format(order.shipping)
+        val shippingLine = if (order.shipping > 0.0) "Frete: R$ %.2f\n".format(order.shipping) else ""
 
         return """
             Novo pedido:
@@ -63,8 +63,8 @@ class EmailService(private val mailSender: JavaMailSender) {
             "- ${it.title} (${it.quantity}x) – R$%.2f".format(it.price)
         }}
 
+            $shippingLine
             Total: $total
-            Frete: $shipping
         """.trimIndent()
     }
 }

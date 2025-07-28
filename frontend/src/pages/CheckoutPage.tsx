@@ -138,7 +138,7 @@ const CheckoutPage = () => {
   return (
     <CheckoutForm
       cartItems={cartItems}
-      total={total}
+      total={total + shipping}
       shipping={shipping}
       form={form}
       updateQuantity={updateQuantity}

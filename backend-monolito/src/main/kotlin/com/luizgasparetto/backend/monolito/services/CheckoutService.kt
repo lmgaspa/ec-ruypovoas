@@ -1,92 +1,102 @@
 package com.luizgasparetto.backend.monolito.services
 
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.luizgasparetto.backend.monolito.dto.CheckoutRequest
 import com.luizgasparetto.backend.monolito.dto.CheckoutResponse
 import com.luizgasparetto.backend.monolito.models.Order
 import com.luizgasparetto.backend.monolito.models.OrderItem
-import com.luizgasparetto.backend.monolito.repositories.BookRepository
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
-import jakarta.transaction.Transactional
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.http.*
 import org.springframework.stereotype.Service
+import org.springframework.web.client.RestTemplate
+import java.util.*
 
 @Service
 class CheckoutService(
-    private val bookRepository: BookRepository,
+    private val objectMapper: ObjectMapper,
     private val orderRepository: OrderRepository,
-    private val emailService: EmailService,
-    private val pixService: PixService
+    private val bookService: BookService,
+    @Value("\${mercadopago.token}") private val token: String
 ) {
 
-    @Transactional
     fun processCheckout(request: CheckoutRequest): CheckoutResponse {
-        val booksMap = bookRepository.findAllById(request.cartItems.map { it.id })
-            .associateBy { it.id }
+        val totalAmount = calculateTotalAmount(request)
+        val url = "https://api.mercadopago.com/v1/payments"
 
-        request.cartItems.forEach { item ->
-            val book = booksMap[item.id] ?: throw IllegalArgumentException("Livro ${item.id} não encontrado.")
-            if (book.stock < item.quantity) {
-                throw IllegalArgumentException("Estoque insuficiente para o livro: ${book.title}")
-            }
+        val headers = HttpHeaders().apply {
+            contentType = MediaType.APPLICATION_JSON
+            setBearerAuth(token)
+            set("X-Idempotency-Key", UUID.randomUUID().toString())
         }
 
-        request.cartItems.forEach { item ->
-            val book = booksMap[item.id]!!
-            book.stock -= item.quantity
-            bookRepository.save(book)
-        }
-
-        val pixResponse = pixService.createPixPayment(
-            request.firstName,
-            request.email,
-            request.total + request.shipping
+        val body = mapOf(
+            "transaction_amount" to totalAmount,
+            "description" to "Compra de livros",
+            "payment_method_id" to "pix",
+            "payer" to mapOf("email" to request.email)
         )
 
-        val paymentId = pixResponse["id"]?.asLong()
-            ?: throw IllegalStateException("ID do pagamento não encontrado.")
+        val httpEntity = HttpEntity(body, headers)
+        val restTemplate = RestTemplate()
+        val response: ResponseEntity<JsonNode> = try {
+            restTemplate.postForEntity(url, httpEntity, JsonNode::class.java)
+        } catch (e: Exception) {
+            println("Erro ao se comunicar com Mercado Pago: ${e.message}")
+            throw RuntimeException("Erro ao processar pagamento com Mercado Pago: ${e.message}", e)
+        }
+
+        val pixResponse = response.body ?: throw RuntimeException("Erro ao gerar pagamento: resposta vazia")
+
         val qrCode = pixResponse["point_of_interaction"]?.get("transaction_data")?.get("qr_code")?.asText()
-            ?: throw IllegalStateException("QR Code não encontrado.")
+            ?: throw IllegalStateException("QR Code não encontrado na resposta do Mercado Pago")
         val qrCodeBase64 = pixResponse["point_of_interaction"]?.get("transaction_data")?.get("qr_code_base64")?.asText()
-            ?: throw IllegalStateException("QR Code Base64 não encontrado.")
+            ?: throw IllegalStateException("QR Code Base64 não encontrado na resposta do Mercado Pago")
 
-        val savedOrder = orderRepository.save(
-            Order(
-                firstName = request.firstName,
-                lastName = request.lastName,
-                email = request.email,
-                address = request.address,
-                city = request.city,
-                state = request.state,
-                cep = request.cep,
-                total = request.total,
-                shipping = request.shipping,
-                paymentId = paymentId,
-                qrCode = qrCode,
-                qrCodeBase64 = qrCodeBase64
-            )
+        val order = Order(
+            firstName = request.firstName,
+            lastName = request.lastName,
+            email = request.email,
+            address = request.address,
+            city = request.city,
+            state = request.state,
+            cep = request.cep,
+            total = totalAmount,
+            shipping = request.shipping,
+            qrCode = qrCode,
+            qrCodeBase64 = qrCodeBase64,
+            items = mutableListOf()
         )
 
-        val orderItems = request.cartItems.map {
+        val orderItems = request.cartItems.map { cartItem ->
             OrderItem(
-                bookId = it.id,
-                title = it.title,
-                quantity = it.quantity,
-                price = it.price,
-                order = savedOrder
+                bookId = cartItem.id,
+                title = cartItem.title,
+                quantity = cartItem.quantity,
+                price = cartItem.price,
+                order = order
             )
+        }.toMutableList()
+
+        order.items = orderItems
+
+        orderRepository.save(order)
+
+        request.cartItems.forEach { cartItem ->
+            bookService.updateStock(cartItem.id, cartItem.quantity)
         }
-
-        savedOrder.items.addAll(orderItems)
-        val finalOrder = orderRepository.save(savedOrder)
-
-
-        emailService.sendClientEmail(finalOrder)
-        emailService.sendAuthorEmail(finalOrder)
 
         return CheckoutResponse(
-            message = "Pedido realizado com sucesso!",
-            orderId = finalOrder.id.toString(),
-            qrCode = finalOrder.qrCode,
-            qrCodeBase64 = finalOrder.qrCodeBase64
+            qrCode = qrCode,
+            qrCodeBase64 = qrCodeBase64,
+            message = "Pedido gerado com sucesso",
+            orderId = order.id.toString()
         )
+    }
+
+    private fun calculateTotalAmount(request: CheckoutRequest): Double {
+        val totalBooks = request.cartItems.sumOf { it.price * it.quantity }
+        return totalBooks + request.shipping
     }
 }

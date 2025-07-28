@@ -5,8 +5,9 @@ import jakarta.persistence.*
 @Entity
 @Table(name = "orders")
 data class Order(
-    @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
-    val id: Long = 0,
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    var id: Long? = null,
 
     val firstName: String,
     val lastName: String,
@@ -17,16 +18,9 @@ data class Order(
     val cep: String,
     val total: Double,
     val shipping: Double,
-    val paymentId: Long = 0L,
-
-    @Column(columnDefinition = "TEXT")
     val qrCode: String? = null,
-
-    @Column(columnDefinition = "TEXT")
     val qrCodeBase64: String? = null,
 
-    @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true)
+    @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
     var items: MutableList<OrderItem> = mutableListOf()
 )
-
-

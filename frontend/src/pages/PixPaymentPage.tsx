@@ -45,12 +45,21 @@ const PixPaymentPage = () => {
       body: JSON.stringify({
         firstName: form.firstName,
         lastName: form.lastName,
+        cpf: form.cpf,
         email: form.email,
         address: form.address,
         city: form.city,
+        number: form.number,
+        complement: form.complement,
+        district: form.district,
         state: form.state,
+        country: form.country,
         cep: form.cep,
         shipping: frete,
+        phone: form.phone,
+        note: form.note,
+        deliver: form.delivery,
+        payment: form.payment,
         total: totalProdutos,
         cartItems
       })
