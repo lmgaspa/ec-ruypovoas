@@ -10,7 +10,7 @@ export interface Book {
   additionalInfo: Record<string, string>;
   category: string;
   relatedBooks: { title: string; imageUrl: string; price: string; category: string; id: string }[];
-  stock: number;
+  stock: 100;
 }
 
 const agenorGasparetto = "Agenor Gasparetto";
