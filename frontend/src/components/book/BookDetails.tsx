@@ -37,6 +37,7 @@ const BookDetails = ({
         additionalInfo,
         category: '',
         relatedBooks,
+        stock: 100,
       },
       quantity
     );
