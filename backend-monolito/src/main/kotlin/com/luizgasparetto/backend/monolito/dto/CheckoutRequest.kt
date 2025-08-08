@@ -12,12 +12,13 @@ data class CheckoutRequest(
     val district: String,
     val city: String,
     val state: String,
-    val phone: String?,
+    val phone: String,
     val email: String,
     val note: String?,
     val payment: String?,
     val shipping: Double,
-    val cartItems: List<CartItemDto>
+    val cartItems: List<CartItemDto>,
+    val total: Double
 )
 
 data class CartItemDto(
@@ -27,3 +28,4 @@ data class CartItemDto(
     val quantity: Int,
     val imageUrl: String
 )
+

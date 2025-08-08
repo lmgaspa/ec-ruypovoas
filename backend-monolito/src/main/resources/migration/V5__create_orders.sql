@@ -1,0 +1,22 @@
+CREATE TABLE orders (
+    id BIGINT PRIMARY KEY,
+    address VARCHAR(255) NOT NULL,
+    cep VARCHAR(20) NOT NULL,
+    city VARCHAR(100) NOT NULL,
+    email VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+    qr_code TEXT NOT NULL,
+    qr_code_base64 TEXT NOT NULL,
+    shipping NUMERIC(10,2) NOT NULL,
+    state VARCHAR(10) NOT NULL,
+    total NUMERIC(10,2) NOT NULL,
+    paid BOOLEAN NOT NULL,
+    txid VARCHAR(255) NOT NULL,
+    complement VARCHAR(255),
+    note TEXT,
+    cpf VARCHAR(20),
+    number VARCHAR(20),
+    district VARCHAR(100),
+    phone VARCHAR(30)
+);

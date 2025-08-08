@@ -32,6 +32,7 @@ const CheckoutForm = (props: CheckoutFormProps) => {
       "city",
       "state",
       "email",
+      "phone"
     ];
 
     const missingField = requiredFields.find(

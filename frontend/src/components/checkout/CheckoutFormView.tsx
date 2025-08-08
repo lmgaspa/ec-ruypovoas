@@ -70,7 +70,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           <input name="district" value={form.district} onChange={handleChange} placeholder="Bairro" className="border p-2" />
           <input name="city" value={form.city} onChange={handleChange} placeholder="Cidade" className="border p-2" />
           <input name="state" value={form.state} onChange={handleChange} placeholder="Estado" className="border p-2" />
-          <input name="phone" value={form.phone} onChange={handleChange} placeholder="Celular (opcional)" className="border p-2 col-span-2" />
+          <input name="phone" value={form.phone} onChange={handleChange} placeholder="Celular" className="border p-2 col-span-2" />
           <input name="email" value={form.email} onChange={handleChange} placeholder="E-mail" className="border p-2 col-span-2" />
         </div>
 

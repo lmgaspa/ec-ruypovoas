@@ -40,7 +40,6 @@ const CheckoutPage = () => {
 
   const onNavigateBack = () => navigate("/");
 
-  // Carrega carrinho e calcula subtotal
   useEffect(() => {
     const cart = getCart();
     setCartItems(cart);
@@ -48,7 +47,6 @@ const CheckoutPage = () => {
     setTotal(sum);
   }, []);
 
-  // Frete só recalcula com cpf e cep limpos
   const cpfCepInfo = useMemo(() => {
     const cpf = form.cpf.replace(/\D/g, "");
     const cep = form.cep.replace(/\D/g, "");
@@ -73,7 +71,6 @@ const CheckoutPage = () => {
       .catch(() => setShipping(0));
   }, [cpfCepInfo, cartItems]);
 
-  // Salva dados no localStorage
   useEffect(() => {
     localStorage.setItem("checkoutForm", JSON.stringify(form));
   }, [form]);

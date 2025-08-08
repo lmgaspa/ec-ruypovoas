@@ -4,6 +4,7 @@ data class CheckoutResponse(
     val qrCode: String,
     val qrCodeBase64: String,
     val message: String,
-    val orderId: String
+    val orderId: String,
+    val txid: String
 )
 

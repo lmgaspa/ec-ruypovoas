@@ -18,7 +18,7 @@ export async function calcularFreteViaCorreios(
     const destinoPrefix = parseInt(cepDestino.substring(0, 3));
     const distancia = isNaN(destinoPrefix) ? 0 : Math.abs(origemPrefix - destinoPrefix);
 
-    const base = 15;
+    const base = 20;
     const adicionalPorDistancia = Math.ceil(distancia / 50) * 3;
     const extra = Math.max(0, pesoTotalKg - 0.3);
     const adicionalPorPeso = Math.ceil(extra / 0.1) * 4;

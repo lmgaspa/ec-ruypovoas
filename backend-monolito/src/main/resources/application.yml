@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ecommerceag
-    username: postgres
-    password: ${JDBC_DATABASE_PASSWORD}
+    url: ${DATABASE_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -12,11 +12,10 @@ spring:
     properties:
       hibernate:
         format_sql: true
-
   mail:
-    host: smtp.gmail.com
-    port: 587
-    username: luhmgasparetto@gmail.com
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
     password: kwkz dksh xncq ubsk
     properties:
       mail:
@@ -26,7 +25,16 @@ spring:
             enable: true
 
 server:
-  port: 8080
+  port: ${SERVER_PORT}
 
-mercadopago:
-    token: ${MERCADO_PAGO_TOKEN}
+email:
+  author: ${EMAIL_AUTHOR}
+
+efi:
+  pix:
+    client_id: ${EFI_CLIENT_ID}
+    client_secret: ${EFI_CLIENT_SECRET}
+    chave: ${EFI_PIX_KEY}
+    cert-path: classpath:producao-811858-agenorgasparettoec.p12
+    cert-password: ""
+    sandbox: false
