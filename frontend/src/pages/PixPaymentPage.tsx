@@ -4,7 +4,7 @@ import { formatPrice } from "../utils/formatPrice";
 import { calcularFreteComBaseEmCarrinho } from "../utils/freteUtils";
 import type { CartItem } from "../context/CartTypes";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8080";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ecommerceag-6fa0e6a5edbf.herokuapp.com";
 
 const PixPaymentPage = () => {
   const navigate = useNavigate();
