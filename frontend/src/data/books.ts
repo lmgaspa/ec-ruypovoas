@@ -22,7 +22,7 @@ export const books: Book[] = [
     id: "extase",
     title: "Êxtase, de birra com Jorge Amado e outras crônicas grapiúnas",
     imageUrl: "/images/extase.webp",
-    price: "R$29,90",
+    price: "R$30,00",
     description: descriptions.extase,
     author: agenorGasparetto,
     additionalInfo: {
@@ -46,7 +46,7 @@ export const books: Book[] = [
     id: "regressantes",
     title: "Regressantes",
     imageUrl: "/images/regressantes.webp",
-    price: "R$20,00",
+    price: "R$30,00",
     description: descriptions.regressantes,
     author: agenorGasparetto,
     additionalInfo: {
