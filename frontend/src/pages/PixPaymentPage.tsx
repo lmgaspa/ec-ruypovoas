@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+// src/pages/PixPaymentPage.tsx
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatPrice } from "../utils/formatPrice";
 import { calcularFreteComBaseEmCarrinho } from "../utils/freteUtils";
@@ -6,62 +7,59 @@ import type { CartItem } from "../context/CartTypes";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ecommerceag-6fa0e6a5edbf.herokuapp.com";
 
-const PixPaymentPage = () => {
+export default function PixPaymentPage() {
   const navigate = useNavigate();
 
-  const initialCart = (() => {
-    const stored = localStorage.getItem("cart");
-    return stored ? JSON.parse(stored) : [];
-  })();
-
-  const [cartItems, setCartItems] = useState<CartItem[]>(initialCart);
+  // estado básico
+  const [cartItems, setCartItems] = useState<CartItem[]>(
+    JSON.parse(localStorage.getItem("cart") || "[]")
+  );
   const [frete, setFrete] = useState(0);
   const [qrCodeImg, setQrCodeImg] = useState("");
   const [pixCopiaECola, setPixCopiaECola] = useState("");
   const [loading, setLoading] = useState(false);
-  const [attempts, setAttempts] = useState(0);
-  const [maxReached, setMaxReached] = useState(false);
 
-  const totalProdutos = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
-  );
+  // controle do pedido / SSE
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [txid, setTxid] = useState<string | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+  const retryRef = useRef<number>(0);
+
+  const totalProdutos = cartItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const totalComFrete = totalProdutos + frete;
 
+  // garante carrinho em memória
   useEffect(() => {
     if (cartItems.length === 0) {
       const stored = localStorage.getItem("cart");
-      if (stored) {
-        setCartItems(JSON.parse(stored));
-      }
+      if (stored) setCartItems(JSON.parse(stored));
     }
   }, [cartItems.length]);
 
+  // calcula frete assim que tiver form + carrinho
   useEffect(() => {
     const savedForm = localStorage.getItem("checkoutForm");
     if (!savedForm || cartItems.length === 0) return;
-
     const form = JSON.parse(savedForm);
     calcularFreteComBaseEmCarrinho({ cep: form.cep, cpf: form.cpf }, cartItems)
       .then(setFrete)
       .catch(() => setFrete(0));
   }, [cartItems]);
 
+  // cria a cobrança (uma vez) e abre SSE
   useEffect(() => {
-    if (!frete || cartItems.length === 0 || qrCodeImg || maxReached) return;
+    if (!frete || cartItems.length === 0 || orderId) return;
+    const savedForm = localStorage.getItem("checkoutForm");
+    if (!savedForm) {
+      navigate("/checkout");
+      return;
+    }
+    const form = JSON.parse(savedForm);
 
-    const fetchQrCode = async () => {
-      const savedForm = localStorage.getItem("checkoutForm");
-      if (!savedForm) {
-        navigate("/checkout");
-        return;
-      }
-
-      const form = JSON.parse(savedForm);
-
-      setLoading(true);
-
+    let cancelled = false;
+    (async () => {
       try {
+        setLoading(true);
         const res = await fetch(`${API_BASE}/api/checkout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -86,42 +84,77 @@ const PixPaymentPage = () => {
             total: totalProdutos,
           }),
         });
-
         if (!res.ok) throw new Error(await res.text());
-
         const data = await res.json();
+
+        if (cancelled) return;
+
         const img = (data.qrCodeBase64 || "").startsWith("data:image")
           ? data.qrCodeBase64
           : `data:image/png;base64,${data.qrCodeBase64 || ""}`;
 
         setQrCodeImg(img);
         setPixCopiaECola(data.qrCode || "");
-      } catch {
-        if (attempts < 2) {
-          setTimeout(() => {
-            setAttempts((prev) => prev + 1);
-          }, 10000); // espera 10 segundos para a próxima
-        } else {
-          setMaxReached(true);
-        }
+        setOrderId(data.orderId);
+        setTxid(data.txid);
+
+        // abre SSE
+        openSse(data.orderId);
+      } catch (err) {
+        console.error("Falha ao gerar cobrança:", err);
       } finally {
         setLoading(false);
       }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frete, cartItems, totalProdutos, navigate]);
+
+  // abre SSE + reconexão simples com backoff
+  function openSse(id: string) {
+    // fecha anterior se houver
+    if (esRef.current) {
+      esRef.current.close();
+      esRef.current = null;
+    }
+    const url = `${API_BASE}/api/orders/${id}/events`;
+    const es = new EventSource(url, { withCredentials: false });
+    esRef.current = es;
+
+    es.onmessage = (evt) => {
+      retryRef.current = 0; // zera backoff quando chega mensagem
+      try {
+        const data = JSON.parse(evt.data || "{}");
+        // você pode usar qualquer payload que implementou no backend:
+        // { type: "paid", orderId, txid, mailedAt } etc.
+        if (data.type === "paid" || data.paid === true) {
+          // limpa carrinho e navega
+          localStorage.removeItem("cart");
+          localStorage.removeItem("checkoutForm");
+          navigate(`/pedido-confirmado?orderId=${id}`);
+        }
+      } catch (e) {
+        console.warn("SSE parse error:", e);
+      }
     };
 
-    fetchQrCode();
-  }, [attempts, frete, cartItems, qrCodeImg, maxReached, navigate, totalProdutos]);
+    es.onerror = () => {
+      es.close();
+      // tenta reconectar com backoff (2s, 4s, 8s… máx 30s)
+      const n = Math.min(30000, Math.pow(2, retryRef.current++) * 2000);
+      setTimeout(() => openSse(id), n);
+    };
+  }
 
-  const handleReviewClick = () => {
-    navigate("/checkout");
-  };
-
-  const retry = () => {
-    setQrCodeImg("");
-    setPixCopiaECola("");
-    setAttempts(0);
-    setMaxReached(false);
-  };
+  // limpa SSE ao sair da página
+  useEffect(() => {
+    return () => {
+      if (esRef.current) esRef.current.close();
+    };
+  }, []);
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -129,15 +162,8 @@ const PixPaymentPage = () => {
 
       <div className="space-y-4">
         {cartItems.map((item) => (
-          <div
-            key={item.id}
-            className="border p-4 rounded shadow-sm flex gap-4 items-center"
-          >
-            <img
-              src={item.imageUrl}
-              alt={item.title}
-              className="w-24 h-auto object-contain"
-            />
+          <div key={item.id} className="border p-4 rounded shadow-sm flex gap-4 items-center">
+            <img src={item.imageUrl} alt={item.title} className="w-24 h-auto object-contain" />
             <div>
               <p className="font-medium">{item.title}</p>
               <p>Quantidade: {item.quantity}</p>
@@ -151,23 +177,10 @@ const PixPaymentPage = () => {
       <div className="mt-6 text-right space-y-2">
         <p className="text-lg">Subtotal: {formatPrice(totalProdutos)}</p>
         <p className="text-lg">Frete: {formatPrice(frete)}</p>
-        <p className="text-xl font-bold">
-          Total com Frete: {formatPrice(totalComFrete)}
-        </p>
+        <p className="text-xl font-bold">Total com Frete: {formatPrice(totalComFrete)}</p>
       </div>
 
-      <div className="mt-8 flex justify-between">
-        <button
-          onClick={handleReviewClick}
-          className="bg-gray-300 hover:bg-gray-400 text-black px-4 py-2 rounded"
-        >
-          Revisar compra
-        </button>
-      </div>
-
-      {loading && (
-        <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>
-      )}
+      {loading && <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>}
 
       {qrCodeImg && (
         <div className="mt-10 text-center space-y-3">
@@ -177,11 +190,7 @@ const PixPaymentPage = () => {
             <div className="max-w-xl mx-auto">
               <p className="mt-4 text-sm text-gray-700">Ou copie e cole no seu app:</p>
               <div className="flex gap-2 items-center mt-1">
-                <input
-                  readOnly
-                  value={pixCopiaECola}
-                  className="flex-1 border rounded px-2 py-1 text-xs"
-                />
+                <input readOnly value={pixCopiaECola} className="flex-1 border rounded px-2 py-1 text-xs" />
                 <button
                   onClick={() => navigator.clipboard.writeText(pixCopiaECola)}
                   className="bg-black text-white px-3 py-1 rounded text-sm"
@@ -189,26 +198,18 @@ const PixPaymentPage = () => {
                   Copiar
                 </button>
               </div>
+              {orderId && txid && (
+                <p className="text-xs text-gray-500 mt-3">
+                  Pedido #{orderId} — TXID {txid}
+                </p>
+              )}
             </div>
           )}
-        </div>
-      )}
-
-      {!qrCodeImg && !loading && maxReached && (
-        <div className="mt-10 text-center">
-          <p className="text-gray-600 mb-3">Não foi possível gerar o QR Code.</p>
-          <button
-            onClick={retry}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 transition"
-          >
-            Tentar novamente
-          </button>
+          <p className="text-sm text-gray-600 mt-4">
+            Assim que o pagamento for confirmado, você será redirecionado automaticamente.
+          </p>
         </div>
       )}
     </div>
   );
-};
-
-export default PixPaymentPage;
-
-//
+}
