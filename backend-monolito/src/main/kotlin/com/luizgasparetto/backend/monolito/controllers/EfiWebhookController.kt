@@ -1,40 +1,83 @@
 package com.luizgasparetto.backend.monolito.controllers
 
+import com.fasterxml.jackson.databind.ObjectMapper
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
+import com.luizgasparetto.backend.monolito.services.BookService
 import com.luizgasparetto.backend.monolito.services.EmailService
+import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
-import org.springframework.web.bind.annotation.PostMapping
-import org.springframework.web.bind.annotation.RequestBody
-import org.springframework.web.bind.annotation.RequestMapping
-import org.springframework.web.bind.annotation.RestController
-import kotlin.collections.get
+import org.springframework.web.bind.annotation.*
 
 @RestController
 @RequestMapping("/api/efi-webhook")
 class EfiWebhookController(
     private val orderRepository: OrderRepository,
-    private val emailService: EmailService
+    private val emailService: EmailService,
+    private val bookService: BookService,
+    private val mapper: ObjectMapper
 ) {
+    private val log = LoggerFactory.getLogger(EfiWebhookController::class.java)
 
-    @PostMapping
-    fun handlePixNotification(@RequestBody payload: Map<String, Any>): ResponseEntity<String> {
-        val pix = (payload["pix"] as? List<*>)?.firstOrNull() as? Map<*, *>
-            ?: return ResponseEntity.badRequest().body("pix inválido")
+    @PostMapping(consumes = ["application/json"])
+    fun handle(@RequestBody rawBody: String): ResponseEntity<String> =
+        process(rawBody)
 
-        val txid = pix["txid"] as? String
-            ?: return ResponseEntity.badRequest().body("txid não encontrado")
+    @PostMapping("/pix", consumes = ["application/json"])
+    fun handlePix(@RequestBody rawBody: String): ResponseEntity<String> =
+        process(rawBody)
 
-        val order = orderRepository.findByTxid(txid)
-            ?: return ResponseEntity.notFound().build()
+    private fun process(rawBody: String): ResponseEntity<String> {
+        log.info("EFI WEBHOOK RAW={}", rawBody.take(5000))
 
-        if (order.paid != true) {
-            order.paid = true
-            orderRepository.save(order)
-
-            emailService.sendClientEmail(order)
-            emailService.sendAuthorEmail(order)
+        val root = try { mapper.readTree(rawBody) } catch (e: Exception) {
+            log.warn("EFI WEBHOOK: JSON inválido: {}", e.message)
+            return ResponseEntity.ok("⚠️ Ignorado: JSON inválido")
         }
 
-        return ResponseEntity.ok("Notificação processada com sucesso")
+        val pix0 = root.path("pix").takeIf { it.isArray && it.size() > 0 }?.get(0)
+        val txid = when {
+            !root.path("txid").isMissingNode -> root.path("txid").asText()
+            pix0 != null && !pix0.path("txid").isMissingNode -> pix0.path("txid").asText()
+            else -> null
+        }?.takeIf { it.isNotBlank() }
+
+        val status = when {
+            !root.path("status").isMissingNode -> root.path("status").asText()
+            pix0 != null && !pix0.path("status").isMissingNode -> pix0.path("status").asText()
+            else -> null
+        }
+
+        log.info("EFI WEBHOOK PARSED txid={}, status={}", txid, status)
+        if (txid == null) return ResponseEntity.ok("⚠️ Ignorado: txid ausente")
+
+        val order = orderRepository.findByTxid(txid)
+            ?: return ResponseEntity.ok("⚠️ Ignorado: pedido não encontrado para txid=$txid")
+
+        val paidStatuses = setOf("CONCLUIDA","LIQUIDADO","LIQUIDADA","ATIVA-RECEBIDA","COMPLETED","PAID")
+        val shouldMarkPaid = status.isNullOrBlank() || paidStatuses.contains(status.uppercase())
+
+        if (!shouldMarkPaid) return ResponseEntity.ok("ℹ️ Ignorado: status=$status não indica pagamento")
+        if (order.paid == true) return ResponseEntity.ok("ℹ️ Ignorado: pedido já estava pago")
+
+        order.paid = true
+        orderRepository.save(order)
+        log.info("EFI WEBHOOK: order {} marcado como pago (txid={})", order.id, txid)
+
+        try {
+            order.items.forEach { item -> bookService.updateStock(item.bookId, item.quantity) }
+            log.info("EFI WEBHOOK: estoque baixado para order {}", order.id)
+        } catch (e: Exception) {
+            log.error("EFI WEBHOOK: falha ao baixar estoque do order {}: {}", order.id, e.message, e)
+        }
+
+        return try {
+            emailService.sendClientEmail(order)
+            emailService.sendAuthorEmail(order)
+            log.info("EFI WEBHOOK: e-mails enviados para order {}", order.id)
+            ResponseEntity.ok("✅ Pago; estoque baixado; e-mails enviados")
+        } catch (e: Exception) {
+            log.error("EFI WEBHOOK: falha ao enviar e-mails do order {}: {}", order.id, e.message, e)
+            ResponseEntity.ok("✅ Pago; estoque baixado; erro ao enviar e-mails (veja logs)")
+        }
     }
 }

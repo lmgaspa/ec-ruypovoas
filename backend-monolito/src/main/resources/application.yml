@@ -12,16 +12,12 @@ spring:
     properties:
       hibernate:
         format_sql: true
-  flyway:
-    enabled: true
-    baseline-on-migrate: true
-    locations: classpath:db/migration
 
   mail:
     host: ${MAIL_HOST}
     port: ${MAIL_PORT}
     username: ${MAIL_USERNAME}
-    password: kwkz dksh xncq ubsk
+    password: ${MAIL_PASSWORD}
     properties:
       mail:
         smtp:

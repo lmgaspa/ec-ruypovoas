@@ -2,6 +2,7 @@ package com.luizgasparetto.backend.monolito.models
 
 import jakarta.persistence.*
 import java.math.BigDecimal
+import java.time.OffsetDateTime
 
 @Entity
 @Table(name = "orders")
@@ -30,12 +31,20 @@ data class Order(
     @Column(nullable = false, precision = 10, scale = 2) val total: BigDecimal,
     @Column(nullable = false, precision = 10, scale = 2) val shipping: BigDecimal,
 
-    @Column(nullable = true) var paid: Boolean? = false,
+    @Column(nullable = false)
+    var paid: Boolean = false,
 
-    @Column(columnDefinition = "TEXT") var qrCode: String? = null,
-    @Column(columnDefinition = "TEXT") var qrCodeBase64: String? = null,
+    @Column(name = "mailed_at")
+    var mailedAt: OffsetDateTime? = null,
 
-    @Column(nullable = false, unique = true, length = 35) var txid: String? = null,
+    @Column(columnDefinition = "TEXT")
+    var qrCode: String? = null,
+
+    @Column(columnDefinition = "TEXT")
+    var qrCodeBase64: String? = null,
+
+    @Column(nullable = false, unique = true, length = 35)
+    var txid: String? = null,
 
     @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
     var items: MutableList<OrderItem> = mutableListOf()

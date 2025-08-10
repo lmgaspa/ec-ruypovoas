@@ -13,23 +13,30 @@ class EmailService(
     private val bookService: BookService,
     @Value("\${email.author}") private val authorEmail: String
 ) {
+    private val log = org.slf4j.LoggerFactory.getLogger(EmailService::class.java)
 
     fun sendClientEmail(order: Order) {
-        val message: MimeMessage = mailSender.createMimeMessage()
-        val helper = MimeMessageHelper(message, true, "UTF-8")
-        helper.setTo(order.email)
-        helper.setSubject("Agenor Gasparetto – Ecommerce | Pagamento confirmado (#${order.id})")
-        helper.setText(buildHtmlMessage(order, isAuthor = false), true)
-        mailSender.send(message)
+        val msg = mailSender.createMimeMessage()
+        val h = MimeMessageHelper(msg, true, "UTF-8")
+        val from = System.getenv("MAIL_USERNAME") ?: authorEmail
+        h.setFrom(from)
+        h.setTo(order.email)
+        h.setSubject("Agenor Gasparetto – Ecommerce | Pagamento confirmado (#${order.id})")
+        h.setText(buildHtmlMessage(order, isAuthor = false), true)
+        try { mailSender.send(msg); log.info("MAIL cliente OK -> {}", order.email) }
+        catch (e: Exception) { log.error("MAIL cliente ERRO: {}", e.message, e) }
     }
 
     fun sendAuthorEmail(order: Order) {
-        val message: MimeMessage = mailSender.createMimeMessage()
-        val helper = MimeMessageHelper(message, true, "UTF-8")
-        helper.setTo(authorEmail) // e-mail do VENDEDOR (definido no application.properties)
-        helper.setSubject("Novo pedido pago (#${order.id}) – Agenor Gasparetto")
-        helper.setText(buildHtmlMessage(order, isAuthor = true), true)
-        mailSender.send(message)
+        val msg = mailSender.createMimeMessage()
+        val h = MimeMessageHelper(msg, true, "UTF-8")
+        val from = System.getenv("MAIL_USERNAME") ?: authorEmail
+        h.setFrom(from)
+        h.setTo(authorEmail)
+        h.setSubject("Novo pedido pago (#${order.id}) – Agenor Gasparetto")
+        h.setText(buildHtmlMessage(order, isAuthor = true), true)
+        try { mailSender.send(msg); log.info("MAIL autor OK -> {}", authorEmail) }
+        catch (e: Exception) { log.error("MAIL autor ERRO: {}", e.message, e) }
     }
 
     private fun buildHtmlMessage(order: Order, isAuthor: Boolean): String {

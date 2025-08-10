@@ -21,7 +21,7 @@ class PixService(
     @Qualifier("efiRestTemplate") private val rt: RestTemplate,
     private val mapper: ObjectMapper
 ) {
-    fun criarCobrancaPix(valor: BigDecimal, chavePix: String, descricao: String): CobrancaPixResponse {
+    fun criarCobrancaPix(valor: BigDecimal, chavePix: String, descricao: String, txid: String): CobrancaPixResponse {
         val token = auth.getAccessToken()
         val base = if (props.sandbox) "https://pix-h.api.efipay.com.br" else "https://pix.api.efipay.com.br"
 
@@ -32,21 +32,30 @@ class PixService(
             "chave" to chavePix,
             "solicitacaoPagador" to descricao
         )
+
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
         }
 
-        val resp = rt.postForEntity("$base/v2/cob", HttpEntity(body, headers), String::class.java)
+        // cria a cobrança usando o mesmo txid
+        val resp = rt.exchange(
+            "$base/v2/cob/$txid",
+            HttpMethod.PUT,
+            HttpEntity(body, headers),
+            String::class.java
+        )
+
         val root = mapper.readTree(resp.body)
-        val locId = root.path("loc").path("id").asText(null) ?: error("loc.id não encontrado no /v2/cob")
+        val locId = root.path("loc").path("id").asText(null) ?: error("loc.id não encontrado")
 
         val qr = rt.exchange("$base/v2/loc/$locId/qrcode", HttpMethod.GET, HttpEntity<Void>(headers), String::class.java)
         val qrJson = mapper.readTree(qr.body)
 
         return CobrancaPixResponse(
             pixCopiaECola = qrJson.path("qrcode").asText(""),
-            imagemQrcodeBase64 = qrJson.path("imagemQrcode").asText("")
+            imagemQrcodeBase64 = qrJson.path("imagemQrcode").asText(""),
+            txid = txid // <-- agora retorna também o txid usado
         )
     }
 }
