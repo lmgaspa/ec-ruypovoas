@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import com.luizgasparetto.backend.monolito.services.BookService
 import com.luizgasparetto.backend.monolito.services.EmailService
+import com.luizgasparetto.backend.monolito.services.OrderSseNotifier
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
@@ -14,19 +15,13 @@ class EfiWebhookController(
     private val orderRepository: OrderRepository,
     private val emailService: EmailService,
     private val bookService: BookService,
-    private val mapper: ObjectMapper
+    private val mapper: ObjectMapper,
+    private val notifier: OrderSseNotifier
 ) {
     private val log = LoggerFactory.getLogger(EfiWebhookController::class.java)
 
     @PostMapping(consumes = ["application/json"])
-    fun handle(@RequestBody rawBody: String): ResponseEntity<String> =
-        process(rawBody)
-
-    @PostMapping("/pix", consumes = ["application/json"])
-    fun handlePix(@RequestBody rawBody: String): ResponseEntity<String> =
-        process(rawBody)
-
-    private fun process(rawBody: String): ResponseEntity<String> {
+    fun handle(@RequestBody rawBody: String): ResponseEntity<String> {
         log.info("EFI WEBHOOK RAW={}", rawBody.take(5000))
 
         val root = try { mapper.readTree(rawBody) } catch (e: Exception) {
@@ -57,7 +52,7 @@ class EfiWebhookController(
         val shouldMarkPaid = status.isNullOrBlank() || paidStatuses.contains(status.uppercase())
 
         if (!shouldMarkPaid) return ResponseEntity.ok("ℹ️ Ignorado: status=$status não indica pagamento")
-        if (order.paid == true) return ResponseEntity.ok("ℹ️ Ignorado: pedido já estava pago")
+        if (order.paid) return ResponseEntity.ok("ℹ️ Ignorado: pedido já estava pago")
 
         order.paid = true
         orderRepository.save(order)
@@ -70,14 +65,17 @@ class EfiWebhookController(
             log.error("EFI WEBHOOK: falha ao baixar estoque do order {}: {}", order.id, e.message, e)
         }
 
-        return try {
+        notifier.notifyPaid(txid, order.id!!)
+
+        try {
             emailService.sendClientEmail(order)
             emailService.sendAuthorEmail(order)
             log.info("EFI WEBHOOK: e-mails enviados para order {}", order.id)
-            ResponseEntity.ok("✅ Pago; estoque baixado; e-mails enviados")
         } catch (e: Exception) {
             log.error("EFI WEBHOOK: falha ao enviar e-mails do order {}: {}", order.id, e.message, e)
-            ResponseEntity.ok("✅ Pago; estoque baixado; erro ao enviar e-mails (veja logs)")
+            return ResponseEntity.ok("✅ Pago; estoque baixado; erro ao enviar e-mails (veja logs)")
         }
+
+        return ResponseEntity.ok("✅ Pago; estoque baixado; e-mails enviados")
     }
 }

@@ -37,7 +37,7 @@ dependencies {
 	implementation("org.apache.httpcomponents.client5:httpclient5:5.2.1")
 	implementation("org.apache.httpcomponents.core5:httpcore5:5.2.1")
 	implementation("br.com.efipay.efisdk:sdk-java-apis-efi:1.2.2")
-	implementation("org.flywaydb:flyway-core:10.15.0")
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0")
 	compileOnly("org.projectlombok:lombok")
 	developmentOnly("org.springframework.boot:spring-boot-devtools")
 	runtimeOnly("org.postgresql:postgresql")
