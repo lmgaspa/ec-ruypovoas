@@ -1,34 +1,34 @@
-// src/pages/PixPaymentPage.tsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import type { CartItem } from "../context/CartTypes";
 import { formatPrice } from "../utils/formatPrice";
 import { calcularFreteComBaseEmCarrinho } from "../utils/freteUtils";
-import type { CartItem } from "../context/CartTypes";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ecommerceag-6fa0e6a5edbf.herokuapp.com";
+const API_BASE =
+  import.meta.env.VITE_API_BASE ??
+  "https://ecommerceag-6fa0e6a5edbf.herokuapp.com";
 
 export default function PixPaymentPage() {
   const navigate = useNavigate();
+  const initialCart: CartItem[] = (() => {
+    const stored = localStorage.getItem("cart");
+    return stored ? JSON.parse(stored) : [];
+  })();
 
-  // estado básico
-  const [cartItems, setCartItems] = useState<CartItem[]>(
-    JSON.parse(localStorage.getItem("cart") || "[]")
-  );
+  const [cartItems, setCartItems] = useState<CartItem[]>(initialCart);
   const [frete, setFrete] = useState(0);
   const [qrCodeImg, setQrCodeImg] = useState("");
   const [pixCopiaECola, setPixCopiaECola] = useState("");
   const [loading, setLoading] = useState(false);
-
-  // controle do pedido / SSE
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [txid, setTxid] = useState<string | null>(null);
-  const esRef = useRef<EventSource | null>(null);
-  const retryRef = useRef<number>(0);
+  const sseRef = useRef<EventSource | null>(null);
 
-  const totalProdutos = cartItems.reduce((s, i) => s + i.price * i.quantity, 0);
+  const totalProdutos = cartItems.reduce(
+    (sum, item) => sum + item.price * item.quantity,
+    0
+  );
   const totalComFrete = totalProdutos + frete;
 
-  // garante carrinho em memória
   useEffect(() => {
     if (cartItems.length === 0) {
       const stored = localStorage.getItem("cart");
@@ -36,7 +36,6 @@ export default function PixPaymentPage() {
     }
   }, [cartItems.length]);
 
-  // calcula frete assim que tiver form + carrinho
   useEffect(() => {
     const savedForm = localStorage.getItem("checkoutForm");
     if (!savedForm || cartItems.length === 0) return;
@@ -46,20 +45,18 @@ export default function PixPaymentPage() {
       .catch(() => setFrete(0));
   }, [cartItems]);
 
-  // cria a cobrança (uma vez) e abre SSE
   useEffect(() => {
-    if (!frete || cartItems.length === 0 || orderId) return;
-    const savedForm = localStorage.getItem("checkoutForm");
-    if (!savedForm) {
-      navigate("/checkout");
-      return;
-    }
-    const form = JSON.parse(savedForm);
+    const run = async () => {
+      if (!frete || cartItems.length === 0 || qrCodeImg) return;
+      const savedForm = localStorage.getItem("checkoutForm");
+      if (!savedForm) {
+        navigate("/checkout");
+        return;
+      }
+      const form = JSON.parse(savedForm);
 
-    let cancelled = false;
-    (async () => {
+      setLoading(true);
       try {
-        setLoading(true);
         const res = await fetch(`${API_BASE}/api/checkout`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -87,74 +84,64 @@ export default function PixPaymentPage() {
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
 
-        if (cancelled) return;
-
         const img = (data.qrCodeBase64 || "").startsWith("data:image")
           ? data.qrCodeBase64
           : `data:image/png;base64,${data.qrCodeBase64 || ""}`;
-
         setQrCodeImg(img);
         setPixCopiaECola(data.qrCode || "");
-        setOrderId(data.orderId);
-        setTxid(data.txid);
+        setOrderId(data.orderId || null);
 
-        // abre SSE
-        openSse(data.orderId);
-      } catch (err) {
-        console.error("Falha ao gerar cobrança:", err);
+        // conecta no SSE para saber quando pagar
+        if (data.orderId) {
+          // fecha um antigo (hot reload etc.)
+          if (sseRef.current) {
+            sseRef.current.close();
+            sseRef.current = null;
+          }
+          const url = `${API_BASE}/api/orders/${data.orderId}/events`;
+          // ...
+          const es = new EventSource(url, { withCredentials: false });
+          sseRef.current = es;
+
+          es.addEventListener("paid", () => {
+            // limpa carrinho e vai para a tela de sucesso
+            localStorage.removeItem("cart");
+            const nf = JSON.parse(localStorage.getItem("checkoutForm") || "{}");
+            const fn = [nf.firstName, nf.lastName]
+              .filter(Boolean)
+              .join(" ")
+              .trim();
+            navigate(
+              `/pedido-confirmado?orderId=${data.orderId}${
+                fn ? `&name=${encodeURIComponent(fn)}` : ""
+              }`
+            );
+          });
+
+          // Evite bloco vazio — log simples já satisfaz o lint:
+          es.onerror = (err) => {
+            console.warn("SSE error (reconexão automática do navegador):", err);
+          };
+        }
+      } catch (e) {
+        console.error(e);
       } finally {
         setLoading(false);
       }
-    })();
+    };
+    run();
 
     return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frete, cartItems, totalProdutos, navigate]);
-
-  // abre SSE + reconexão simples com backoff
-  function openSse(id: string) {
-    // fecha anterior se houver
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
-    }
-    const url = `${API_BASE}/api/orders/${id}/events`;
-    const es = new EventSource(url, { withCredentials: false });
-    esRef.current = es;
-
-    es.onmessage = (evt) => {
-      retryRef.current = 0; // zera backoff quando chega mensagem
-      try {
-        const data = JSON.parse(evt.data || "{}");
-        // você pode usar qualquer payload que implementou no backend:
-        // { type: "paid", orderId, txid, mailedAt } etc.
-        if (data.type === "paid" || data.paid === true) {
-          // limpa carrinho e navega
-          localStorage.removeItem("cart");
-          localStorage.removeItem("checkoutForm");
-          navigate(`/pedido-confirmado?orderId=${id}`);
-        }
-      } catch (e) {
-        console.warn("SSE parse error:", e);
+      if (sseRef.current) {
+        sseRef.current.close();
+        sseRef.current = null;
       }
     };
+  }, [frete, cartItems, qrCodeImg, totalProdutos, navigate]);
 
-    es.onerror = () => {
-      es.close();
-      // tenta reconectar com backoff (2s, 4s, 8s… máx 30s)
-      const n = Math.min(30000, Math.pow(2, retryRef.current++) * 2000);
-      setTimeout(() => openSse(id), n);
-    };
-  }
-
-  // limpa SSE ao sair da página
-  useEffect(() => {
-    return () => {
-      if (esRef.current) esRef.current.close();
-    };
-  }, []);
+  const handleReviewClick = () => {
+    navigate("/checkout");
+  };
 
   return (
     <div className="max-w-3xl mx-auto p-6">
@@ -162,8 +149,15 @@ export default function PixPaymentPage() {
 
       <div className="space-y-4">
         {cartItems.map((item) => (
-          <div key={item.id} className="border p-4 rounded shadow-sm flex gap-4 items-center">
-            <img src={item.imageUrl} alt={item.title} className="w-24 h-auto object-contain" />
+          <div
+            key={item.id}
+            className="border p-4 rounded shadow-sm flex gap-4 items-center"
+          >
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="w-24 h-auto object-contain"
+            />
             <div>
               <p className="font-medium">{item.title}</p>
               <p>Quantidade: {item.quantity}</p>
@@ -177,20 +171,47 @@ export default function PixPaymentPage() {
       <div className="mt-6 text-right space-y-2">
         <p className="text-lg">Subtotal: {formatPrice(totalProdutos)}</p>
         <p className="text-lg">Frete: {formatPrice(frete)}</p>
-        <p className="text-xl font-bold">Total com Frete: {formatPrice(totalComFrete)}</p>
+        <p className="text-xl font-bold">
+          Total com Frete: {formatPrice(totalComFrete)}
+        </p>
       </div>
 
-      {loading && <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>}
+      <div className="mt-8 flex justify-between">
+        <button
+          onClick={handleReviewClick}
+          className="bg-gray-300 hover:bg-gray-400 text-black px-4 py-2 rounded"
+        >
+          Revisar compra
+        </button>
+
+        {orderId && (
+          <span className="text-sm text-gray-500 self-center">
+            Pedido #{orderId}
+          </span>
+        )}
+      </div>
+
+      {loading && (
+        <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>
+      )}
 
       {qrCodeImg && (
         <div className="mt-10 text-center space-y-3">
-          <p className="text-lg font-medium">Escaneie o QR Code com seu app do banco:</p>
+          <p className="text-lg font-medium">
+            Escaneie o QR Code com seu app do banco:
+          </p>
           <img src={qrCodeImg} alt="QR Code Pix" className="mx-auto" />
           {pixCopiaECola && (
             <div className="max-w-xl mx-auto">
-              <p className="mt-4 text-sm text-gray-700">Ou copie e cole no seu app:</p>
+              <p className="mt-4 text-sm text-gray-700">
+                Ou copie e cole no seu app:
+              </p>
               <div className="flex gap-2 items-center mt-1">
-                <input readOnly value={pixCopiaECola} className="flex-1 border rounded px-2 py-1 text-xs" />
+                <input
+                  readOnly
+                  value={pixCopiaECola}
+                  className="flex-1 border rounded px-2 py-1 text-xs"
+                />
                 <button
                   onClick={() => navigator.clipboard.writeText(pixCopiaECola)}
                   className="bg-black text-white px-3 py-1 rounded text-sm"
@@ -198,16 +219,8 @@ export default function PixPaymentPage() {
                   Copiar
                 </button>
               </div>
-              {orderId && txid && (
-                <p className="text-xs text-gray-500 mt-3">
-                  Pedido #{orderId} — TXID {txid}
-                </p>
-              )}
             </div>
           )}
-          <p className="text-sm text-gray-600 mt-4">
-            Assim que o pagamento for confirmado, você será redirecionado automaticamente.
-          </p>
         </div>
       )}
     </div>

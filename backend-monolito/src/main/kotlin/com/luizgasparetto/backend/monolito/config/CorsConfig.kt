@@ -8,14 +8,17 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 @Configuration
 class CorsConfig {
     @Bean
-    fun corsConfigurer(): WebMvcConfigurer {
-        return object : WebMvcConfigurer {
-            override fun addCorsMappings(registry: CorsRegistry) {
-                registry.addMapping("/**")
-                    .allowedOrigins("https://www.agenorgasparetto.com.br", "http://localhost:5173")
-                    .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-                    .allowedHeaders("*")
-            }
+    fun corsConfigurer(): WebMvcConfigurer = object : WebMvcConfigurer {
+        override fun addCorsMappings(registry: CorsRegistry) {
+            registry.addMapping("/**")
+                .allowedOrigins(
+                    "https://www.agenorgasparetto.com.br",
+                    "https://agenorgasparetto.com.br",
+                    "http://localhost:5173"
+                )
+                .allowedMethods("GET","POST","PUT","DELETE","OPTIONS")
+                .allowedHeaders("*")
+                .exposedHeaders("Content-Type")
         }
     }
 }

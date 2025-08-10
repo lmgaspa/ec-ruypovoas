@@ -12,6 +12,14 @@ spring:
     properties:
       hibernate:
         format_sql: true
+    open-in-view: false
+
+  mvc:
+    async:
+      request-timeout: 0
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
 
   mail:
     host: ${MAIL_HOST}
@@ -26,7 +34,8 @@ spring:
             enable: true
 
 server:
-  port: ${SERVER_PORT}
+  port: ${PORT:${SERVER_PORT:8080}}
+  shutdown: graceful
 
 email:
   author: ${EMAIL_AUTHOR}

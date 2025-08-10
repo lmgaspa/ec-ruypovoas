@@ -1,12 +1,13 @@
 package com.luizgasparetto.backend.monolito.controllers
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.luizgasparetto.backend.monolito.realtime.OrderEventsPublisher
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import com.luizgasparetto.backend.monolito.services.BookService
 import com.luizgasparetto.backend.monolito.services.EmailService
+import com.luizgasparetto.backend.monolito.services.OrderEventsPublisher
 import org.slf4j.LoggerFactory
 import org.springframework.http.ResponseEntity
+import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.bind.annotation.*
 
 @RestController
@@ -21,6 +22,7 @@ class EfiWebhookController(
     private val log = LoggerFactory.getLogger(EfiWebhookController::class.java)
 
     @PostMapping(consumes = ["application/json"])
+    @Transactional
     fun handle(@RequestBody rawBody: String): ResponseEntity<String> {
         log.info("EFI WEBHOOK RAW={}", rawBody.take(5000))
 
@@ -45,7 +47,8 @@ class EfiWebhookController(
         log.info("EFI WEBHOOK PARSED txid={}, status={}", txid, status)
         if (txid == null) return ResponseEntity.ok("⚠️ Ignorado: txid ausente")
 
-        val order = orderRepository.findByTxid(txid)
+        // garante items carregados
+        val order = orderRepository.findWithItemsByTxid(txid)
             ?: return ResponseEntity.ok("⚠️ Ignorado: pedido não encontrado para txid=$txid")
 
         val paidStatuses = setOf("CONCLUIDA","LIQUIDADO","LIQUIDADA","ATIVA-RECEBIDA","COMPLETED","PAID")
@@ -72,13 +75,17 @@ class EfiWebhookController(
             log.error("EFI WEBHOOK: falha ao enviar e-mails do order {}: {}", order.id, e.message, e)
         }
 
-        // avisa os SSE do frontend
-        events.publishPaid(order.id!!)
+        val orderId = order.id ?: return ResponseEntity.ok("✅ Pago; mas orderId nulo (sem SSE)")
+        try {
+            events.publishPaid(orderId)
+            log.info("EFI WEBHOOK: SSE publicado para order {}", orderId)
+        } catch (e: Exception) {
+            log.warn("EFI WEBHOOK: falha ao publicar SSE para order {}: {}", orderId, e.message)
+        }
 
         return ResponseEntity.ok("✅ Pago; estoque baixado; e-mails enviados")
     }
 
-    // aceita também /api/efi-webhook/pix
     @PostMapping("/pix", consumes = ["application/json"])
     fun handlePix(@RequestBody rawBody: String): ResponseEntity<String> = handle(rawBody)
 }
