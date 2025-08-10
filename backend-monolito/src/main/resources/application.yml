@@ -56,3 +56,9 @@ efi:
     cert-path: classpath:producao-811858-agenorgasparettoec.p12
     cert-password: ""
     sandbox: false
+
+springdoc:
+  api-docs.path: /api-docs
+  swagger-ui.path: /swagger
+  swagger-ui.display-request-duration: true
+  swagger-ui.try-it-out-enabled: true
