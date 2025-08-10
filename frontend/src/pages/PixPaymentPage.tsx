@@ -10,13 +10,14 @@ const API_BASE =
 
 export default function PixPaymentPage() {
   const navigate = useNavigate();
+
   const initialCart: CartItem[] = (() => {
     const stored = localStorage.getItem("cart");
     return stored ? JSON.parse(stored) : [];
   })();
 
   const [cartItems, setCartItems] = useState<CartItem[]>(initialCart);
-  const [frete, setFrete] = useState(0);
+  const [frete, setFrete] = useState<number | null>(null); // null = ainda não calculado
   const [qrCodeImg, setQrCodeImg] = useState("");
   const [pixCopiaECola, setPixCopiaECola] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,8 +28,9 @@ export default function PixPaymentPage() {
     (sum, item) => sum + item.price * item.quantity,
     0
   );
-  const totalComFrete = totalProdutos + frete;
+  const totalComFrete = totalProdutos + (frete ?? 0);
 
+  // garante carrinho carregado (hot reload / aba reaberta)
   useEffect(() => {
     if (cartItems.length === 0) {
       const stored = localStorage.getItem("cart");
@@ -36,6 +38,7 @@ export default function PixPaymentPage() {
     }
   }, [cartItems.length]);
 
+  // calcula frete quando houver carrinho
   useEffect(() => {
     const savedForm = localStorage.getItem("checkoutForm");
     if (!savedForm || cartItems.length === 0) return;
@@ -45,9 +48,12 @@ export default function PixPaymentPage() {
       .catch(() => setFrete(0));
   }, [cartItems]);
 
+  // Efeito A — cria o pedido (POST /api/checkout). NÃO abre SSE aqui.
   useEffect(() => {
     const run = async () => {
-      if (!frete || cartItems.length === 0 || qrCodeImg) return;
+      // espera frete calculado; não recria pedido se já houver orderId
+      if (frete === null || cartItems.length === 0 || orderId) return;
+
       const savedForm = localStorage.getItem("checkoutForm");
       if (!savedForm) {
         navigate("/checkout");
@@ -76,7 +82,7 @@ export default function PixPaymentPage() {
             email: form.email,
             note: form.note,
             payment: form.payment,
-            shipping: frete,
+            shipping: frete, // pode ser 0
             cartItems,
             total: totalProdutos,
           }),
@@ -87,42 +93,10 @@ export default function PixPaymentPage() {
         const img = (data.qrCodeBase64 || "").startsWith("data:image")
           ? data.qrCodeBase64
           : `data:image/png;base64,${data.qrCodeBase64 || ""}`;
+
         setQrCodeImg(img);
         setPixCopiaECola(data.qrCode || "");
-        setOrderId(data.orderId || null);
-
-        // conecta no SSE para saber quando pagar
-        if (data.orderId) {
-          // fecha um antigo (hot reload etc.)
-          if (sseRef.current) {
-            sseRef.current.close();
-            sseRef.current = null;
-          }
-          const url = `${API_BASE}/api/orders/${data.orderId}/events`;
-          // ...
-          const es = new EventSource(url, { withCredentials: false });
-          sseRef.current = es;
-
-          es.addEventListener("paid", () => {
-            // limpa carrinho e vai para a tela de sucesso
-            localStorage.removeItem("cart");
-            const nf = JSON.parse(localStorage.getItem("checkoutForm") || "{}");
-            const fn = [nf.firstName, nf.lastName]
-              .filter(Boolean)
-              .join(" ")
-              .trim();
-            navigate(
-              `/pedido-confirmado?orderId=${data.orderId}${
-                fn ? `&name=${encodeURIComponent(fn)}` : ""
-              }`
-            );
-          });
-
-          // Evite bloco vazio — log simples já satisfaz o lint:
-          es.onerror = (err) => {
-            console.warn("SSE error (reconexão automática do navegador):", err);
-          };
-        }
+        setOrderId(String(data.orderId || ""));
       } catch (e) {
         console.error(e);
       } finally {
@@ -130,14 +104,66 @@ export default function PixPaymentPage() {
       }
     };
     run();
+    // deps mínimas e estáveis; evita fechar SSE por mudanças irrelevantes
+  }, [frete, cartItems, totalProdutos, navigate, orderId]);
+
+  // Efeito B — conecta o SSE quando existir orderId
+  useEffect(() => {
+    if (!orderId) return;
+
+    // fecha conexão anterior (StrictMode/dev ou navegação)
+    if (sseRef.current) {
+      try {
+        sseRef.current.close();
+      } catch {
+        // no-op
+      }
+      sseRef.current = null;
+    }
+
+    const url = `${API_BASE}/api/orders/${orderId}/events`;
+    const es = new EventSource(url, { withCredentials: false });
+    sseRef.current = es;
+
+    es.addEventListener("paid", () => {
+      try {
+        es.close();
+        sseRef.current = null;
+      } catch {
+        // no-op
+      }
+      localStorage.removeItem("cart");
+      const nf = JSON.parse(localStorage.getItem("checkoutForm") || "{}");
+      const fn = [nf.firstName, nf.lastName].filter(Boolean).join(" ").trim();
+
+      // lê o estado orderId (resolve no-unused-vars)
+      const idForNav = orderId;
+
+      navigate(
+        `/pedido-confirmado?orderId=${idForNav}${
+          fn ? `&name=${encodeURIComponent(fn)}` : ""
+        }`
+      );
+    });
+
+    es.addEventListener("ping", () => {
+      // keep-alive opcional (no-op)
+    });
+
+    es.onerror = (_err) => {
+      // o navegador tenta reconectar automaticamente
+      console.warn("SSE error (o navegador irá tentar reconectar):", _err);
+    };
 
     return () => {
-      if (sseRef.current) {
-        sseRef.current.close();
-        sseRef.current = null;
+      try {
+        es.close();
+      } catch {
+        // no-op
       }
+      sseRef.current = null;
     };
-  }, [frete, cartItems, qrCodeImg, totalProdutos, navigate]);
+  }, [orderId, navigate]);
 
   const handleReviewClick = () => {
     navigate("/checkout");
@@ -170,7 +196,7 @@ export default function PixPaymentPage() {
 
       <div className="mt-6 text-right space-y-2">
         <p className="text-lg">Subtotal: {formatPrice(totalProdutos)}</p>
-        <p className="text-lg">Frete: {formatPrice(frete)}</p>
+        <p className="text-lg">Frete: {formatPrice(frete ?? 0)}</p>
         <p className="text-xl font-bold">
           Total com Frete: {formatPrice(totalComFrete)}
         </p>
@@ -183,12 +209,8 @@ export default function PixPaymentPage() {
         >
           Revisar compra
         </button>
-
-        {orderId && (
-          <span className="text-sm text-gray-500 self-center">
-            Pedido #{orderId}
-          </span>
-        )}
+        {/* não exibir número do pedido */}
+        <span className="text-sm text-gray-500 self-center" />
       </div>
 
       {loading && (

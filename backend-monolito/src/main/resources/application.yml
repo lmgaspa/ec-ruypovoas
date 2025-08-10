@@ -8,18 +8,17 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
-    open-in-view: false
 
   mvc:
     async:
-      request-timeout: 0
+      request-timeout: -1
 
   lifecycle:
-    timeout-per-shutdown-phase: 30s
+    timeout-per-shutdown-phase: 15s
 
   mail:
     host: ${MAIL_HOST}
@@ -36,6 +35,15 @@ spring:
 server:
   port: ${PORT:${SERVER_PORT:8080}}
   shutdown: graceful
+  compression:
+    enabled: true
+    mime-types: application/json, text/html, text/plain
+
+logging:
+  level:
+    org.hibernate: warn
+    org.hibernate.orm.connections.pooling: warn
+    com.zaxxer.hikari: warn
 
 email:
   author: ${EMAIL_AUTHOR}
