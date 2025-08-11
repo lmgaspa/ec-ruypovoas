@@ -7,12 +7,12 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 
 @Configuration
 class SchedulerConfig {
+
     @Bean
-    fun taskScheduler(): TaskScheduler {
-        val s = ThreadPoolTaskScheduler()
-        s.poolSize = 2
-        s.setThreadNamePrefix("sse-hb-")
-        s.initialize()
-        return s
-    }
+    fun taskScheduler(): TaskScheduler =
+        ThreadPoolTaskScheduler().apply {
+            poolSize = 2
+            setThreadNamePrefix("sse-hb-")
+            initialize()
+        }
 }

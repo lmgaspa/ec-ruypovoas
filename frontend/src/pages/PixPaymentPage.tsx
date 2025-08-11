@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CartItem } from "../context/CartTypes";
 import { formatPrice } from "../utils/formatPrice";
@@ -17,20 +17,43 @@ export default function PixPaymentPage() {
   })();
 
   const [cartItems, setCartItems] = useState<CartItem[]>(initialCart);
-  const [frete, setFrete] = useState<number | null>(null); // null = ainda não calculado
+  const [frete, setFrete] = useState<number | null>(null);
   const [qrCodeImg, setQrCodeImg] = useState("");
   const [pixCopiaECola, setPixCopiaECola] = useState("");
   const [loading, setLoading] = useState(false);
   const [orderId, setOrderId] = useState<string | null>(null);
+
   const sseRef = useRef<EventSource | null>(null);
+  const retryTimerRef = useRef<number | null>(null);
+  const backoffRef = useRef(1500);
+  const isMountedRef = useRef(true);
 
-  const totalProdutos = cartItems.reduce(
-    (sum, item) => sum + item.price * item.quantity,
-    0
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      try {
+        sseRef.current?.close();
+      } catch {
+        /* no-op */
+      }
+      sseRef.current = null;
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const totalProdutos = useMemo(
+    () => cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0),
+    [cartItems]
   );
-  const totalComFrete = totalProdutos + (frete ?? 0);
+  const totalComFrete = useMemo(
+    () => totalProdutos + (frete ?? 0),
+    [totalProdutos, frete]
+  );
 
-  // garante carrinho carregado (hot reload / aba reaberta)
   useEffect(() => {
     if (cartItems.length === 0) {
       const stored = localStorage.getItem("cart");
@@ -38,20 +61,25 @@ export default function PixPaymentPage() {
     }
   }, [cartItems.length]);
 
-  // calcula frete quando houver carrinho
   useEffect(() => {
     const savedForm = localStorage.getItem("checkoutForm");
     if (!savedForm || cartItems.length === 0) return;
     const form = JSON.parse(savedForm);
     calcularFreteComBaseEmCarrinho({ cep: form.cep, cpf: form.cpf }, cartItems)
-      .then(setFrete)
-      .catch(() => setFrete(0));
+      .then((v) => {
+        if (isMountedRef.current) {
+          setFrete(v);
+        }
+      })
+      .catch(() => {
+        if (isMountedRef.current) {
+          setFrete(0);
+        }
+      });
   }, [cartItems]);
 
-  // Efeito A — cria o pedido (POST /api/checkout). NÃO abre SSE aqui.
   useEffect(() => {
     const run = async () => {
-      // espera frete calculado; não recria pedido se já houver orderId
       if (frete === null || cartItems.length === 0 || orderId) return;
 
       const savedForm = localStorage.getItem("checkoutForm");
@@ -94,50 +122,57 @@ export default function PixPaymentPage() {
           ? data.qrCodeBase64
           : `data:image/png;base64,${data.qrCodeBase64 || ""}`;
 
+        if (!isMountedRef.current) return;
+
         setQrCodeImg(img);
         setPixCopiaECola(data.qrCode || "");
         setOrderId(String(data.orderId || ""));
       } catch (e) {
         console.error(e);
       } finally {
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       }
     };
     run();
-    // deps mínimas e estáveis; evita fechar SSE por mudanças irrelevantes
   }, [frete, cartItems, totalProdutos, navigate, orderId]);
 
-  // Efeito B — conecta o SSE quando existir orderId
-  useEffect(() => {
-    if (!orderId) return;
-
-    // fecha conexão anterior (StrictMode/dev ou navegação)
-    if (sseRef.current) {
-      try {
-        sseRef.current.close();
-      } catch {
-        // no-op
-      }
-      sseRef.current = null;
+  const connectSSE = (id: string) => {
+    try {
+      sseRef.current?.close();
+    } catch {
+      /* no-op */
     }
+    sseRef.current = null;
 
-    const url = `${API_BASE}/api/orders/${orderId}/events`;
+    const url = `${API_BASE}/api/orders/${id}/events`;
     const es = new EventSource(url, { withCredentials: false });
     sseRef.current = es;
+
+    const resetBackoff = () => {
+      backoffRef.current = 1500;
+    };
+
+    es.addEventListener("open", () => {
+      resetBackoff();
+    });
+
+    es.addEventListener("ping", () => {
+      /* keep-alive */
+    });
 
     es.addEventListener("paid", () => {
       try {
         es.close();
         sseRef.current = null;
       } catch {
-        // no-op
+        /* no-op */
       }
       localStorage.removeItem("cart");
       const nf = JSON.parse(localStorage.getItem("checkoutForm") || "{}");
       const fn = [nf.firstName, nf.lastName].filter(Boolean).join(" ").trim();
-
-      // lê o estado orderId (resolve no-unused-vars)
-      const idForNav = orderId;
+      const idForNav = id;
 
       navigate(
         `/pedido-confirmado?orderId=${idForNav}${
@@ -146,24 +181,46 @@ export default function PixPaymentPage() {
       );
     });
 
-    es.addEventListener("ping", () => {
-      // keep-alive opcional (no-op)
-    });
-
-    es.onerror = (_err) => {
-      // o navegador tenta reconectar automaticamente
-      console.warn("SSE error (o navegador irá tentar reconectar):", _err);
-    };
-
-    return () => {
+    es.onerror = () => {
       try {
         es.close();
       } catch {
-        // no-op
+        /* no-op */
       }
       sseRef.current = null;
+
+      const wait = Math.min(backoffRef.current, 10000);
+
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+      retryTimerRef.current = window.setTimeout(() => {
+        backoffRef.current = Math.min(backoffRef.current * 2, 10000);
+        if (isMountedRef.current && orderId === id) {
+          connectSSE(id);
+        }
+      }, wait);
     };
-  }, [orderId, navigate]);
+  };
+
+  useEffect(() => {
+    if (!orderId) return;
+    connectSSE(orderId);
+    return () => {
+      try {
+        sseRef.current?.close();
+      } catch {
+        /* no-op */
+      }
+      sseRef.current = null;
+      if (retryTimerRef.current) {
+        window.clearTimeout(retryTimerRef.current);
+        retryTimerRef.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderId]);
 
   const handleReviewClick = () => {
     navigate("/checkout");
@@ -209,7 +266,6 @@ export default function PixPaymentPage() {
         >
           Revisar compra
         </button>
-        {/* não exibir número do pedido */}
         <span className="text-sm text-gray-500 self-center" />
       </div>
 
