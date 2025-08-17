@@ -7,5 +7,7 @@ data class BookDTO(
     val price: Double,
     val description: String,
     val author: String,
-    val category: String
+    val category: String,
+    val stock: Int,
+    val available: Boolean
 )

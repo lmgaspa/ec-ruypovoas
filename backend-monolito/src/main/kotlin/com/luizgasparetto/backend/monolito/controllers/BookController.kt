@@ -12,4 +12,9 @@ class BookController(private val bookService: BookService) {
     @GetMapping
     fun listBooks(): ResponseEntity<List<BookDTO>> =
         ResponseEntity.ok(bookService.getAllBooks())
+
+    @GetMapping("/{id}")
+    fun getBook(@PathVariable id: String): ResponseEntity<BookDTO> =
+        ResponseEntity.ok(bookService.getBookDtoById(id))
 }
+

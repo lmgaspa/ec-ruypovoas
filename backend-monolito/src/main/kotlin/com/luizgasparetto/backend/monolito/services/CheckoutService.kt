@@ -29,6 +29,10 @@ class CheckoutService(
     private val log = org.slf4j.LoggerFactory.getLogger(CheckoutService::class.java)
 
     fun processCheckout(request: CheckoutRequest): CheckoutResponse {
+        request.cartItems.forEach { item ->
+            bookService.validateStock(item.id, item.quantity)
+        }
+        
         val totalAmount = calculateTotalAmount(request)
         val txid = java.util.UUID.randomUUID().toString().replace("-", "").take(35)
 

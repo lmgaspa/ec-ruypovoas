@@ -9,18 +9,27 @@ import org.springframework.transaction.annotation.Transactional
 @Service
 class BookService(private val bookRepository: BookRepository) {
 
+    private fun toDto(it: Book): BookDTO {
+        val s = it.stock ?: 0
+        return BookDTO(
+            id = it.id,
+            title = it.title,
+            imageUrl = it.imageUrl,
+            price = it.price,
+            description = it.description,
+            author = it.author ?: "Desconhecido",
+            category = it.category ?: "Desconhecido",
+            stock = s,
+            available = s > 0
+        )
+    }
+
     fun getAllBooks(): List<BookDTO> =
-        bookRepository.findAll().map {
-            BookDTO(
-                id = it.id,
-                title = it.title,
-                imageUrl = it.imageUrl,
-                price = it.price,
-                description = it.description,
-                author = it.author ?: "Desconhecido",
-                category = it.category ?: "Desconhecido"
-            )
-        }
+        bookRepository.findAll().map(::toDto)
+
+    fun getBookDtoById(id: String): BookDTO =
+        bookRepository.findById(id).map(::toDto)
+            .orElseThrow { NoSuchElementException("Livro $id não encontrado") }
 
     fun getBookById(id: String): Book =
         bookRepository.findById(id).orElseThrow { RuntimeException("Livro não encontrado") }
@@ -35,7 +44,6 @@ class BookService(private val bookRepository: BookRepository) {
     fun getImageUrl(bookId: String): String {
         val book = bookRepository.findById(bookId)
             .orElseThrow { RuntimeException("Livro $bookId não encontrado") }
-
         return book.imageUrl ?: ""
     }
 

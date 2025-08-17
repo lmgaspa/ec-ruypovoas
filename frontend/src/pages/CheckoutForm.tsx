@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import type { CartItem } from "../context/CartTypes";
-import type { CheckoutFormData } from "../types/CheckoutTypes";
+import type { CheckoutFormData } from "../types/checkoutTypes";
 import CheckoutFormView from "../components/checkout/CheckoutFormView";
 
 interface CheckoutFormProps {
