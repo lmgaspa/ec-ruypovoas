@@ -43,5 +43,18 @@ export const descriptions = {
     São episódios que, com variantes, muitos avós vivenciaram e vivenciam.<br>
     Os pais, em sua pressa, quase sempre passam batidos.<br>
     E, quando notam, anos já se passaram e os filhos já cresceram.
+  `,
+  versos: `
+  O livro reúne dois conjuntos de poesias.  O primeiro, Versos Desnudos e o segundo,Poemas em Tempos Tensos.<br><br>
+  O primeiro consiste em poemas sintéticos, sem adjetivações, franciscanos, minimalistas, em que o sentido e a estética emergem a partir de um sequenciamento de vocábulos.<br><br>
+  Esses versos, resumidos como desnudos, apresentam dois formatos:<br><br>
+  Em um formato estão poemas com dois blocos de sete versos cada e, um segundo formato, composto por cinco poemas com cinco blocos de 18 versos cada.<br><br>
+  E, no final, cinco poemas convencionais, Poemas em Tempos Tensos, que têm na tensão geopolítica do presente e na insensatez da Humanidade seu foco principal.
+  `,
+  versi: `
+  Il libro riunisce due raccolte di poesie. La prima, “Versi Spogli”, e la seconda, “Poems in Tempi Difficili”.<br><br>
+  La prima raccolta è composta da poesie sintetiche, prive di aggettivi, minimaliste, in cui significato ed estetica emergono da una sequenza di parole.<br><br>
+  Questi versi, riassunti come “spogli”, sono disponibili in due formati: un formato presenta poesie con due blocchi di sette versi ciascuno e un secondo formato è composto da cinque poesie con cinque blocchi di 18 versi ciascuno.<br><br>
+  E, infine, cinque poesie convenzionali, “Poesie in Tempi Difficili”, il cui obiettivo principale è la tensione geopolitica del presente e la follia dell’umanità.
   `
 };

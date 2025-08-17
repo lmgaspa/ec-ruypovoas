@@ -89,5 +89,53 @@ export const books: Book[] = [
       { id: "extase", title: "Êxtase, de birra com Jorge Amado e outras crônicas grapiúnas", imageUrl: "/images/extase.webp", price: "R$29,90", category: "Crônicas" },
       { id: "regressantes", title: "Regressantes", imageUrl: "/images/regressantes.webp", price: "R$20,00", category: "Contos" }
     ]
+  },
+  {
+    id: "versos",
+    title: "Versos Desnudos, Poemas em tempo Tensos",
+    imageUrl: "/images/versos.webp",
+    price: "R$20,00",
+    description: descriptions.versos,
+    author: agenorGasparetto,
+    additionalInfo: {
+      Peso: "100 g",
+      Dimensões: "11 × 21 × 1 cm",
+      Selo: selo,
+      ISBN: "978-85-8151-300-3",
+      Edição: "1ª",
+      "Ano de Publicação": "2025",
+      "Nº de Páginas": "80",
+      Idioma: idioma
+    },
+    category: "Poemas",
+    stock: 100,
+    relatedBooks: [
+      { id: "extase", title: "Êxtase, de birra com Jorge Amado e outras crônicas grapiúnas", imageUrl: "/images/extase.webp", price: "R$29,90", category: "Crônicas" },
+      { id: "regressantes", title: "Regressantes", imageUrl: "/images/regressantes.webp", price: "R$20,00", category: "Contos" }
+    ],
+  },
+  {
+    id: "versi",
+    title: "Versi spogli: poesie in tempi difficili",
+    imageUrl: "/images/versi.webp",
+    price: "R$30,00",
+    description: descriptions.versi,
+    author: agenorGasparetto,
+    additionalInfo: {
+      Peso: "100 g",
+      Dimensões: "11 × 21 × 1 cm",
+      Selo: selo,
+      ISBN: "978-85-8151-306-5",
+      Edição: "1ª",
+      "Ano de Publicação": "2025",
+      "Nº de Páginas": "80",
+      Idioma: idioma
+    },
+    category: "Poemas",
+    stock: 100,
+    relatedBooks: [
+      { id: "extase", title: "Êxtase, de birra com Jorge Amado e outras crônicas grapiúnas", imageUrl: "/images/extase.webp", price: "R$29,90", category: "Crônicas" },
+      { id: "regressantes", title: "Regressantes", imageUrl: "/images/regressantes.webp", price: "R$20,00", category: "Contos" }
+    ],
   }
 ];

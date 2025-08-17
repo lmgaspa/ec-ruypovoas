@@ -37,6 +37,20 @@ function HomePage() {
             description="Histórias de luta e resistência." 
           />
         </div>
+        <div onClick={() => navigate('/books/versos')}>
+          <ContentBlock 
+            title="Versos desnudos: poemas em tempos tensos" 
+            imageUrl="/images/versos.webp" 
+            description="Versos desnudos: poemas em tempos tensos." 
+          />
+        </div>
+        <div onClick={() => navigate('/books/versi')}>
+          <ContentBlock 
+            title="Versi spogli: poesie in tempi difficili" 
+            imageUrl="/images/versi.webp" 
+            description="Versi spogli: poesie in tempi difficili." 
+          />
+        </div>
       </div>
     </Container>
   );
