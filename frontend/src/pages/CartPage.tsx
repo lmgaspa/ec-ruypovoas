@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import CartTable from "../components/cart/CartTable";
 import CouponInput from "../components/cart/CouponInput";
 import CartSummary from "../components/cart/CartSummary";
+import { getStockByIds } from "../api/stock";
 
 interface CartItem {
   id: string;
@@ -20,9 +21,7 @@ const CartPage = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const storedCart = JSON.parse(
-      localStorage.getItem("cart") || "[]"
-    ) as CartItem[];
+    const storedCart = JSON.parse(localStorage.getItem("cart") || "[]") as CartItem[];
     const normalizedCart = storedCart.map((item) => {
       const rawPrice = item.price as unknown;
       const price =
@@ -31,24 +30,39 @@ const CartPage = () => {
           : typeof rawPrice === "number"
           ? rawPrice
           : 0;
-
-      return {
-        ...item,
-        price,
-        quantity: typeof item.quantity === "number" ? item.quantity : 1,
-      };
+      return { ...item, price, quantity: typeof item.quantity === "number" ? item.quantity : 1 };
     });
 
-    setCartItems(normalizedCart);
-    calculateSubtotal(normalizedCart);
-    localStorage.setItem("cart", JSON.stringify(normalizedCart));
+    // Revalida estoque com o backend e ajusta quantidades
+    (async () => {
+      if (!normalizedCart.length) {
+        setCartItems([]);
+        setSubtotal(0);
+        localStorage.setItem("cart", "[]");
+        return;
+      }
+      const ids = normalizedCart.map((i) => i.id);
+      const stockMap = await getStockByIds(ids);
+      const fixed = normalizedCart
+        .map((i) => {
+          const s = stockMap[i.id]?.stock ?? 0;
+          const qty = Math.min(i.quantity, Math.max(0, s));
+          return { ...i, quantity: qty };
+        })
+        .filter((i) => i.quantity > 0);
+
+      setCartItems(fixed);
+      localStorage.setItem("cart", JSON.stringify(fixed));
+      calculateSubtotal(fixed);
+
+      if (fixed.length !== normalizedCart.length || JSON.stringify(fixed) !== JSON.stringify(normalizedCart)) {
+        alert("Atualizamos seu carrinho de acordo com o estoque atual.");
+      }
+    })();
   }, []);
 
   const calculateSubtotal = (items: CartItem[]) => {
-    const total = items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
+    const total = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
     setSubtotal(total);
   };
 
@@ -57,15 +71,12 @@ const CartPage = () => {
       .map((item) => {
         if (item.id === itemId) {
           const newQuantity = item.quantity + amount;
-          if (newQuantity <= 0) {
-            return null;
-          }
-
+          if (newQuantity <= 0) return null;
           return { ...item, quantity: newQuantity };
         }
         return item;
       })
-      .filter((item) => item !== null) as CartItem[];
+      .filter((item): item is CartItem => item !== null);
 
     setCartItems(updatedItems);
     localStorage.setItem("cart", JSON.stringify(updatedItems));
@@ -81,10 +92,7 @@ const CartPage = () => {
 
   const handleApplyCoupon = () => {
     const validCoupon = import.meta.env.VITE_COUPON_CODE || "DESCONTO10";
-    const discountRate = parseFloat(
-      import.meta.env.VITE_COUPON_DISCOUNT || "0.1"
-    );
-
+    const discountRate = parseFloat(import.meta.env.VITE_COUPON_DISCOUNT || "0.1");
     if (coupon.trim().toUpperCase() === validCoupon.toUpperCase()) {
       const discountValue = subtotal * discountRate;
       setDiscount(discountValue);
@@ -101,34 +109,19 @@ const CartPage = () => {
 
   return (
     <div className="container mx-auto mt-0 pt-2 mb-8 px-4 bg-background rounded-md shadow-lg p-6 sm:p-8">
-      <h1 className="text-4xl font-bold mb-8 text-text-primary">
-        Carrinho de Compras
-      </h1>
+      <h1 className="text-4xl font-bold mb-8 text-text-primary">Carrinho de Compras</h1>
       {cartItems.length === 0 ? (
         <p className="text-text-secondary">Seu carrinho está vazio.</p>
       ) : (
         <>
-          <CartTable
-            items={cartItems}
-            onQuantityChange={updateQuantity}
-            onRemoveItem={removeItem}
-          />
+          <CartTable items={cartItems} onQuantityChange={updateQuantity} onRemoveItem={removeItem} />
 
-          {/* Layout responsivo aqui */}
           <div className="flex flex-col lg:flex-row gap-4 mb-8">
             <div className="w-full lg:w-1/2">
-              <CouponInput
-                value={coupon}
-                onChange={setCoupon}
-                onApply={handleApplyCoupon}
-              />
+              <CouponInput value={coupon} onChange={setCoupon} onApply={handleApplyCoupon} />
             </div>
             <div className="w-full lg:w-1/2">
-              <CartSummary
-                subtotal={subtotal}
-                discount={discount}
-                onCheckout={handleCheckout}
-              />
+              <CartSummary subtotal={subtotal} discount={discount} onCheckout={handleCheckout} />
             </div>
           </div>
 

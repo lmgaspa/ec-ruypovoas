@@ -5,6 +5,7 @@ import { formatCep, formatCpf, formatCelular } from "../utils/masks";
 import CheckoutForm from "./CheckoutForm";
 import type { CartItem } from "../context/CartTypes";
 import { calcularFreteComBaseEmCarrinho } from "../utils/freteUtils";
+import { getStockByIds } from "../api/stock";
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
@@ -42,10 +43,27 @@ const CheckoutPage = () => {
 
   useEffect(() => {
     const cart = getCart();
-    setCartItems(cart);
-    const sum = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    setTotal(sum);
-  }, []);
+    (async () => {
+      const ids = cart.map((c) => c.id);
+      const stockMap = await getStockByIds(ids);
+      const fixed = cart
+        .map((i) => {
+          const s = stockMap[i.id]?.stock ?? 0;
+          const qty = Math.min(i.quantity, Math.max(0, s));
+          return { ...i, quantity: qty };
+        })
+        .filter((i) => i.quantity > 0);
+
+      setCartItems(fixed);
+      localStorage.setItem("cart", JSON.stringify(fixed));
+      const sum = fixed.reduce((acc, item) => acc + item.price * item.quantity, 0);
+      setTotal(sum);
+
+      if (fixed.length !== cart.length || JSON.stringify(fixed) !== JSON.stringify(cart)) {
+        alert("Atualizamos seu carrinho de acordo com o estoque atual.");
+      }
+    })();
+  }, [getCart]);
 
   const cpfCepInfo = useMemo(() => {
     const cpf = form.cpf.replace(/\D/g, "");
@@ -54,19 +72,12 @@ const CheckoutPage = () => {
   }, [form.cpf, form.cep]);
 
   useEffect(() => {
-    if (
-      cpfCepInfo.cpf === "00000000000" ||
-      cpfCepInfo.cep.length !== 8 ||
-      cartItems.length === 0
-    ) {
+    if (cpfCepInfo.cpf === "00000000000" || cpfCepInfo.cep.length !== 8 || cartItems.length === 0) {
       setShipping(0);
       return;
     }
 
-    calcularFreteComBaseEmCarrinho(
-      { cpf: cpfCepInfo.cpf, cep: cpfCepInfo.cep },
-      cartItems
-    )
+    calcularFreteComBaseEmCarrinho({ cpf: cpfCepInfo.cpf, cep: cpfCepInfo.cep }, cartItems)
       .then(setShipping)
       .catch(() => setShipping(0));
   }, [cpfCepInfo, cartItems]);
@@ -77,18 +88,12 @@ const CheckoutPage = () => {
 
   const updateQuantity = (id: string, delta: number) => {
     const updated = cartItems
-      .map((item) =>
-        item.id === id ? { ...item, quantity: item.quantity + delta } : item
-      )
+      .map((item) => (item.id === id ? { ...item, quantity: item.quantity + delta } : item))
       .filter((item) => item.quantity > 0);
 
     setCartItems(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
-
-    const sum = updated.reduce(
-      (acc, item) => acc + item.price * item.quantity,
-      0
-    );
+    const sum = updated.reduce((acc, item) => acc + item.price * item.quantity, 0);
     setTotal(sum);
   };
 
@@ -96,17 +101,11 @@ const CheckoutPage = () => {
     const updated = cartItems.filter((item) => item.id !== id);
     setCartItems(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
-
-    const sum = updated.reduce(
-      (acc, item) => acc + item.price * item.quantity,
-      0
-    );
+    const sum = updated.reduce((acc, item) => acc + item.price * item.quantity, 0);
     setTotal(sum);
   };
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value: inputValue } = e.target;
     let value = inputValue;
 

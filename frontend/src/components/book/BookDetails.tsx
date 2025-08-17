@@ -1,14 +1,13 @@
-// BookDetails.tsx
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import type { Book } from '../../data/books';
-import BookDescription from './BookDescription';
-import BookAuthor from './BookAuthor';
-import AdditionalInfo from './AdditionalInfo';
-import RelatedBooks from './RelatedBooks';
-import AuthorInfo from './AuthorInfo';
-import ButtonCountCart from '../cart/ButtonCountCart';
-import { useCart } from '../../hooks/useCart';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import type { Book } from "../../data/books";
+import BookDescription from "./BookDescription";
+import BookAuthor from "./BookAuthor";
+import AdditionalInfo from "./AdditionalInfo";
+import RelatedBooks from "./RelatedBooks";
+import AuthorInfo from "./AuthorInfo";
+import ButtonCountCart from "../cart/ButtonCountCart";
+import { useCart } from "../../hooks/useCart";
 
 type BookDetailsProps = Book;
 
@@ -31,43 +30,30 @@ const BookDetails = ({
   const isAvailable = (stock ?? 0) > 0;
   const lowStock = isAvailable && (stock ?? 0) <= 5;
 
-  // Se o estoque mudar (ou chegar a 0), garante que a quantidade fique válida
   useEffect(() => {
     if (!isAvailable) setQuantity(1);
     else if (quantity > (stock ?? 1)) setQuantity(stock ?? 1);
-  }, [stock, isAvailable]); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stock, isAvailable]);
 
   const handleIncrease = () => {
     if (!isAvailable) return;
-    setQuantity(prev => Math.min(prev + 1, stock ?? 1));
+    setQuantity((prev) => Math.min(prev + 1, stock ?? 1));
   };
 
-  const handleDecrease = () => {
-    setQuantity(prev => Math.max(1, prev - 1));
-  };
+  const handleDecrease = () => setQuantity((prev) => Math.max(1, prev - 1));
 
   const handleAddToCart = () => {
     if (!isAvailable) {
-      alert('Este produto está esgotado.');
+      alert("Este produto está esgotado.");
       return;
     }
     addToCart(
-      {
-        id,
-        title,
-        imageUrl,
-        price,            // mantém string por compatibilidade com o restante do app
-        description,
-        author,
-        additionalInfo,
-        category,         // usa a categoria correta do livro
-        relatedBooks,     // mantém como está por enquanto
-        stock,            // passa o estoque real
-      },
+      { id, title, imageUrl, price, description, author, additionalInfo, category, relatedBooks, stock },
       quantity
     );
-    alert('Item adicionado ao carrinho!');
-    navigate('/cart');
+    alert("Item adicionado ao carrinho!");
+    navigate("/cart");
   };
 
   return (
@@ -85,9 +71,7 @@ const BookDetails = ({
             {!isAvailable ? (
               <span className="px-3 py-1 text-sm bg-gray-300 text-gray-800 rounded">Esgotado</span>
             ) : lowStock ? (
-              <span className="px-3 py-1 text-sm bg-yellow-200 text-yellow-900 rounded">
-                Últimas unidades ({stock})
-              </span>
+              <span className="px-3 py-1 text-sm bg-yellow-200 text-yellow-900 rounded">Últimas unidades ({stock})</span>
             ) : null}
           </div>
 
@@ -95,21 +79,15 @@ const BookDetails = ({
           <BookAuthor author={author} />
 
           <div className="flex items-center gap-4 mb-8">
-            <ButtonCountCart
-              quantity={quantity}
-              onDecrease={handleDecrease}
-              onIncrease={handleIncrease}
-            />
+            <ButtonCountCart quantity={quantity} onDecrease={handleDecrease} onIncrease={handleIncrease} />
             <button
               onClick={handleAddToCart}
               disabled={!isAvailable}
               className={`px-6 py-2 rounded-md shadow-md transition ${
-                isAvailable
-                  ? 'bg-green-600 text-white hover:bg-green-700'
-                  : 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                isAvailable ? "bg-green-600 text-white hover:bg-green-700" : "bg-gray-300 text-gray-600 cursor-not-allowed"
               }`}
             >
-              {isAvailable ? 'Adicionar ao Carrinho' : 'Esgotado'}
+              {isAvailable ? "Adicionar ao Carrinho" : "Esgotado"}
             </button>
           </div>
         </div>
