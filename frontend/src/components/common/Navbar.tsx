@@ -24,6 +24,12 @@ const Navbar = () => {
           Livros
         </Link>
         <Link
+          to="/support"
+          className="text-base sm:text-lg font-semibold text-background hover:text-secondary transition"
+        >
+          Ajuda
+        </Link>
+        <Link
           to="/cart"
           className="text-base sm:text-lg font-semibold text-background hover:text-secondary transition"
         >
