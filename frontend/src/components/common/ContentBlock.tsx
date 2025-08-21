@@ -8,11 +8,11 @@ interface ContentBlockProps {
 const ContentBlock: React.FC<ContentBlockProps> = ({ title, imageUrl, description, isAuthor = false }) => {
   return (
     <div 
-      className={`bg-background rounded-lg shadow-lg overflow-hidden flex flex-col items-center p-8 ${
+      className={`bg-background2 rounded-lg shadow-lg overflow-hidden flex flex-col items-center p-8 ${
         isAuthor ? "max-w-5xl mx-auto mb-16" : "w-full max-w-sm mb-16"
       }`}
     >
-      <div className={`${isAuthor ? "w-64 h-64" : "w-64 h-64"} rounded-full bg-background shadow-lg overflow-hidden flex items-center justify-center mb-6`}>
+      <div className={`${isAuthor ? "w-64 h-64" : "w-64 h-64"} rounded-full bg-background2 shadow-lg overflow-hidden flex items-center justify-center mb-6`}>
         <img 
           src={imageUrl} 
           alt={title} 
