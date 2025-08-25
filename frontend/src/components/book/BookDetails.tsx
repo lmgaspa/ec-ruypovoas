@@ -28,7 +28,7 @@ const BookDetails = ({
   const { addToCart } = useCart();
 
   const isAvailable = (stock ?? 0) > 0;
-  const lowStock = isAvailable && (stock ?? 0) <= 5;
+  const lowStock = isAvailable && (stock ?? 0) <= 10;
 
   useEffect(() => {
     if (!isAvailable) setQuantity(1);
@@ -71,7 +71,9 @@ const BookDetails = ({
             {!isAvailable ? (
               <span className="px-3 py-1 text-sm bg-gray-300 text-gray-800 rounded">Esgotado</span>
             ) : lowStock ? (
-              <span className="px-3 py-1 text-sm bg-yellow-200 text-yellow-900 rounded">Últimas unidades ({stock})</span>
+              <p className="mt-1 text-red-600 font-bold">
+                ({stock}) EM ESTOQUE
+              </p>
             ) : null}
           </div>
 

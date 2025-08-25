@@ -38,7 +38,7 @@ const BooksListPage = () => {
           const s = stockMap[book.id]?.stock;
           const realStock = typeof s === "number" ? s : 0;
           const isAvailable = realStock > 0;
-          const lowStock = isAvailable && realStock <= 5;
+          const lowStock = isAvailable && realStock <= 10;
           const q = quantity[book.id] || 1;
 
           return (
@@ -58,9 +58,7 @@ const BooksListPage = () => {
               ) : !isAvailable ? (
                 <span className="inline-block mb-3 px-3 py-1 text-sm bg-gray-300 text-gray-800 rounded">Esgotado</span>
               ) : lowStock ? (
-                <span className="inline-block mb-3 px-3 py-1 text-sm bg-yellow-200 text-yellow-900 rounded">
-                  Últimas unidades ({realStock})
-                </span>
+                <p className="mt-1 text-red-600 font-bold mb-4">({s}) EM ESTOQUE</p>
               ) : null}
 
               <div className="flex items-center gap-4 mb-4">
