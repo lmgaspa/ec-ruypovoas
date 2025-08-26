@@ -4,7 +4,7 @@ interface AuthorInfoProps {
 
 const AuthorInfo: React.FC<AuthorInfoProps> = ({ author }) => {
   return (
-    <div className="bg-background rounded-lg shadow-lg p-8 mb-16">
+    <div className="bg-background rounded-lg shadow-lg p-8 mb-0">
       <div className="flex flex-col md:flex-row items-center gap-8">
         <img src="/images/agenor.webp" alt={author} className="w-32 h-32 rounded-full shadow-md" />
         <div>

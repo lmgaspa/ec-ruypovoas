@@ -26,7 +26,7 @@ function App() {
     <Router>
       <ScrollToTop />
       <Navbar />
-      <main className="min-h-screen bg-background py-8">
+      <main className="min-h-screen bg-background py-4">
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/support" element={<SupportPage />} />

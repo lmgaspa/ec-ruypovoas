@@ -57,7 +57,7 @@ const BookDetails = ({
   };
 
   return (
-    <div className="container mx-auto my-16 px-4 mt-0">
+    <div className="container mx-auto my-16 px-4 ">
       <div className="flex flex-col md:flex-row items-start gap-16">
         <div className="w-full md:w-1/3 flex justify-center">
           <img src={imageUrl} alt={title} className="w-full max-w-xs rounded-md shadow-md" />
