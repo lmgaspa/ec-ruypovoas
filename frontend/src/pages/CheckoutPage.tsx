@@ -40,7 +40,7 @@ const CheckoutPage = () => {
         };
   });
 
-  const onNavigateBack = () => navigate("/");
+  const onNavigateBack = () => navigate("/books");
 
   useEffect(() => {
     const cart = getCart();
