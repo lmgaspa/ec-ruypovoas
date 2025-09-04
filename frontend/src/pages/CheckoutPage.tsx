@@ -14,6 +14,7 @@ const CheckoutPage = () => {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [total, setTotal] = useState(0);
   const [shipping, setShipping] = useState(0);
+  const [stockById, setStockById] = useState<Record<string, number>>({});
 
   const [form, setForm] = useState(() => {
     const saved = localStorage.getItem("checkoutForm");
@@ -39,31 +40,35 @@ const CheckoutPage = () => {
         };
   });
 
-  const onNavigateBack = () => navigate("/");
+  const onNavigateBack = () => navigate("/books");
 
   useEffect(() => {
     const cart = getCart();
     (async () => {
       const ids = cart.map((c) => c.id);
       const stockMap = await getStockByIds(ids);
+      const stockDict = Object.fromEntries(ids.map((id) => [id, Math.max(0, stockMap[id]?.stock ?? 0)]));
+      setStockById(stockDict);
       const fixed = cart
         .map((i) => {
-          const s = stockMap[i.id]?.stock ?? 0;
+          const s = stockDict[i.id] ?? 0;
           const qty = Math.min(i.quantity, Math.max(0, s));
           return { ...i, quantity: qty };
         })
         .filter((i) => i.quantity > 0);
 
-      setCartItems(fixed);
-      localStorage.setItem("cart", JSON.stringify(fixed));
       const sum = fixed.reduce((acc, item) => acc + item.price * item.quantity, 0);
+
+      setCartItems(fixed);
       setTotal(sum);
+      localStorage.setItem("cart", JSON.stringify(fixed));
 
       if (fixed.length !== cart.length || JSON.stringify(fixed) !== JSON.stringify(cart)) {
         alert("Atualizamos seu carrinho de acordo com o estoque atual.");
       }
     })();
-  }, [getCart]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const cpfCepInfo = useMemo(() => {
     const cpf = form.cpf.replace(/\D/g, "");
@@ -88,8 +93,18 @@ const CheckoutPage = () => {
 
   const updateQuantity = (id: string, delta: number) => {
     const updated = cartItems
-      .map((item) => (item.id === id ? { ...item, quantity: item.quantity + delta } : item))
-      .filter((item) => item.quantity > 0);
+      .map((item) => {
+        if (item.id !== id) return item;
+        const max = stockById[id] ?? Infinity;
+        const next = item.quantity + delta;
+        if (delta > 0 && next > max) {
+          alert("Quantidade solicitada excede o estoque disponível.");
+          return item;
+        }
+        if (next <= 0) return null;
+        return { ...item, quantity: next };
+      })
+      .filter((item): item is CartItem => item !== null);
 
     setCartItems(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
@@ -103,6 +118,7 @@ const CheckoutPage = () => {
     localStorage.setItem("cart", JSON.stringify(updated));
     const sum = updated.reduce((acc, item) => acc + item.price * item.quantity, 0);
     setTotal(sum);
+    if (updated.length === 0) setShipping(0);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {

@@ -50,6 +50,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         <div className="mb-4">
           <button
             onClick={onNavigateBack}
+            type="button"
             className="px-6 py-2 bg-green-600 text-white rounded-md shadow-md transition hover:bg-green-700"
           >
             ← Continuar comprando
@@ -95,10 +96,16 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
             <div className="flex-1">
               <p className="text-sm font-semibold text-text-primary">{item.title}</p>
               <div className="flex items-center gap-2 mt-1">
-                <button className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
+                <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
                 <span className="text-sm">{item.quantity}</span>
-                <button className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
-                <button className="ml-2 text-red-500 text-xs hover:underline" onClick={() => removeItem(item.id)}>Remover</button>
+                <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
+                <button
+                  type="button"
+                  className="ml-2 text-red-500 text-xs hover:underline"
+                  onClick={() => removeItem(item.id)}
+                >
+                  Remover
+                </button>
               </div>
             </div>
             <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
@@ -121,6 +128,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
 
         <button
           onClick={handlePixCheckout}
+          type="button"
           className="bg-red-600 text-white py-2 w-full mt-4 rounded hover:bg-red-500 transition"
         >
           Finalizar Pagamento por Pix

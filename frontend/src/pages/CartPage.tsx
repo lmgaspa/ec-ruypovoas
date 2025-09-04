@@ -11,6 +11,7 @@ interface CartItem {
   imageUrl: string;
   price: number;
   quantity: number;
+  stock?: number;
 }
 
 const CartPage = () => {
@@ -18,6 +19,7 @@ const CartPage = () => {
   const [subtotal, setSubtotal] = useState(0);
   const [discount, setDiscount] = useState(0);
   const [coupon, setCoupon] = useState("");
+  const [stockById, setStockById] = useState<Record<string, number>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -33,7 +35,6 @@ const CartPage = () => {
       return { ...item, price, quantity: typeof item.quantity === "number" ? item.quantity : 1 };
     });
 
-    // Revalida estoque com o backend e ajusta quantidades
     (async () => {
       if (!normalizedCart.length) {
         setCartItems([]);
@@ -43,9 +44,11 @@ const CartPage = () => {
       }
       const ids = normalizedCart.map((i) => i.id);
       const stockMap = await getStockByIds(ids);
+      const stockDict = Object.fromEntries(ids.map((id) => [id, Math.max(0, stockMap[id]?.stock ?? 0)]));
+      setStockById(stockDict);
       const fixed = normalizedCart
         .map((i) => {
-          const s = stockMap[i.id]?.stock ?? 0;
+          const s = stockDict[i.id] ?? 0;
           const qty = Math.min(i.quantity, Math.max(0, s));
           return { ...i, quantity: qty };
         })
@@ -69,12 +72,15 @@ const CartPage = () => {
   const updateQuantity = (itemId: string, amount: number) => {
     const updatedItems = cartItems
       .map((item) => {
-        if (item.id === itemId) {
-          const newQuantity = item.quantity + amount;
-          if (newQuantity <= 0) return null;
-          return { ...item, quantity: newQuantity };
+        if (item.id !== itemId) return item;
+        const max = stockById[item.id] ?? Infinity;
+        const next = item.quantity + amount;
+        if (amount > 0 && next > max) {
+          alert("Quantidade solicitada excede o estoque disponível.");
+          return item;
         }
-        return item;
+        if (next <= 0) return null;
+        return { ...item, quantity: next };
       })
       .filter((item): item is CartItem => item !== null);
 

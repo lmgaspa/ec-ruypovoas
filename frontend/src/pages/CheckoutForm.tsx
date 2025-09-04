@@ -21,6 +21,11 @@ const CheckoutForm = (props: CheckoutFormProps) => {
   const navigate = useNavigate();
 
   const handlePixCheckout = () => {
+    if (!props.cartItems.length) {
+      alert("Seu carrinho está vazio.");
+      return;
+    }
+
     const requiredFields: (keyof CheckoutFormData)[] = [
       "firstName",
       "lastName",
@@ -36,11 +41,22 @@ const CheckoutForm = (props: CheckoutFormProps) => {
     ];
 
     const missingField = requiredFields.find(
-      (field) => !props.form[field].trim()
+      (field) => String(props.form[field] ?? "").trim() === ""
     );
 
     if (missingField) {
       alert("Por favor, preencha todos os campos obrigatórios.");
+      return;
+    }
+
+    const cpfDigits = props.form.cpf.replace(/\D/g, "");
+    const cepDigits = props.form.cep.replace(/\D/g, "");
+    if (cpfDigits.length !== 11) {
+      alert("CPF inválido.");
+      return;
+    }
+    if (cepDigits.length !== 8) {
+      alert("CEP inválido.");
       return;
     }
 
