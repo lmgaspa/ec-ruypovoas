@@ -21,6 +21,7 @@ class CheckoutService(
     private val efiAuthService: EfiAuthService,
     private val objectMapper: ObjectMapper,
     private val orderRepository: OrderRepository,
+    private val mapper: ObjectMapper,
     private val bookService: BookService,
     @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
     @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,

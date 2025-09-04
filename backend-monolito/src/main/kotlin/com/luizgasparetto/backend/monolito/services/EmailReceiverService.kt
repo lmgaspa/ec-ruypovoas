@@ -5,44 +5,54 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
+import org.slf4j.LoggerFactory
 import jakarta.mail.internet.MimeMessage
 
+/**
+ * Envia e-mail para o AUTOR (quem recebe o aviso de novo pedido pago).
+ * (Desmembrado a partir do EmailService original)
+ */
 @Service
-class EmailService(
+class EmailReceiverService(
     private val mailSender: JavaMailSender,
     private val bookService: BookService,
     @Value("\${email.author}") private val authorEmail: String
 ) {
-    private val log = org.slf4j.LoggerFactory.getLogger(EmailService::class.java)
-
-    fun sendClientEmail(order: Order) {
-        val msg = mailSender.createMimeMessage()
-        val h = MimeMessageHelper(msg, true, "UTF-8")
-        val from = System.getenv("MAIL_USERNAME") ?: authorEmail
-        h.setFrom(from)
-        h.setTo(order.email)
-        h.setSubject("Agenor Gasparetto – Ecommerce | Pagamento confirmado (#${order.id})")
-        h.setText(buildHtmlMessage(order, isAuthor = false), true)
-        try { mailSender.send(msg); log.info("MAIL cliente OK -> {}", order.email) }
-        catch (e: Exception) { log.error("MAIL cliente ERRO: {}", e.message, e) }
-    }
+    private val log = LoggerFactory.getLogger(EmailReceiverService::class.java)
 
     fun sendAuthorEmail(order: Order) {
-        val msg = mailSender.createMimeMessage()
+        val msg: MimeMessage = mailSender.createMimeMessage()
         val h = MimeMessageHelper(msg, true, "UTF-8")
         val from = System.getenv("MAIL_USERNAME") ?: authorEmail
         h.setFrom(from)
         h.setTo(authorEmail)
         h.setSubject("Novo pedido pago (#${order.id}) – Agenor Gasparetto")
         h.setText(buildHtmlMessage(order, isAuthor = true), true)
-        try { mailSender.send(msg); log.info("MAIL autor OK -> {}", authorEmail) }
-        catch (e: Exception) { log.error("MAIL autor ERRO: {}", e.message, e) }
+        try {
+            mailSender.send(msg)
+            log.info("MAIL autor OK -> {}", authorEmail)
+        } catch (e: Exception) {
+            log.error("MAIL autor ERRO: {}", e.message, e)
+        }
     }
 
+    // =========================
+    // Mantido: mesmo HTML do serviço anterior
+    // ALTERADO: inclui WhatsApp com máscara/link no header do autor
+    // ALTERADO: CPF sem máscara
+    // =========================
     private fun buildHtmlMessage(order: Order, isAuthor: Boolean): String {
         val total = "R$ %.2f".format(order.total.toDouble())
         val shipping = if (order.shipping > java.math.BigDecimal.ZERO)
             "R$ %.2f".format(order.shipping.toDouble()) else "Grátis"
+
+        // ALTERADO: preparar WhatsApp do cliente (a partir do phone vindo do front)
+        val phoneDigits = onlyDigits(order.phone)
+        val nationalPhone = normalizeBrPhone(phoneDigits)
+        val maskedPhone = maskCelularBr(nationalPhone.ifEmpty { order.phone })
+        val waHref = nationalPhone.takeIf { it.length == 11 }
+            ?.let { "https://wa.me/55$it" }
+            ?: "https://wa.me/55$phoneDigits"
 
         val itemsHtml = order.items.joinToString("") {
             val img = bookService.getImageUrl(it.bookId)
@@ -51,7 +61,9 @@ class EmailService(
               <td style="padding:12px 0;border-bottom:1px solid #eee;">
                 <table cellpadding="0" cellspacing="0" style="border-collapse:collapse">
                   <tr>
-                    <td><img src="$img" alt="${it.title}" width="70" style="border-radius:6px;vertical-align:middle;margin-right:12px"></td>
+                    <td>
+                      <img src="$img" alt="${it.title}" width="70" style="border-radius:6px;vertical-align:middle;margin-right:12px">
+                    </td>
                     <td style="padding-left:12px">
                       <div style="font-weight:600">${it.title}</div>
                       <div style="color:#555;font-size:12px">${it.quantity}x – R$ ${"%.2f".format(it.price.toDouble())}</div>
@@ -65,9 +77,9 @@ class EmailService(
 
         val addressLine = buildString {
             append(order.address)
-            order.number?.takeIf { it.isNotBlank() }?.let { append(", nº ").append(it) }
+            order.number.takeIf { it.isNotBlank() }?.let { append(", nº ").append(it) }
             order.complement?.takeIf { it.isNotBlank() }?.let { append(" – ").append(it) }
-            order.district?.takeIf { it.isNotBlank() }?.let { append(" – ").append(it) }
+            order.district.takeIf { it.isNotBlank() }?.let { append(" – ").append(it) }
             append(", ${order.city} - ${order.state}, CEP ${order.cep}")
         }
 
@@ -77,12 +89,13 @@ class EmailService(
             """.trimIndent()
         } ?: ""
 
-        val cpfLine = order.cpf?.takeIf { it.isNotBlank() }?.let {
-            "<p style=\"margin:0 0 4px\">CPF: ${maskCpf(it)}</p>"
+        // ALTERADO: CPF sem máscara
+        val cpfLine = order.cpf.takeIf { it.isNotBlank() }?.let {
+            "<p style=\"margin:0 0 4px\">CPF: ${escapeHtml(it)}</p>"
         } ?: ""
 
         val headerClient = """
-            <p style="margin:0 0 12px">Olá, <strong>${order.firstName} ${order.lastName} </strong>!</p>
+            <p style="margin:0 0 12px">Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
             <p style="margin:0 0 16px">Recebemos o seu pagamento via Pix. Seu pedido foi confirmado 🎉</p>
             <p style="margin:0 0 4px">Endereço de recebimento: $addressLine</p>
         """.trimIndent()
@@ -90,8 +103,11 @@ class EmailService(
         val headerAuthor = """
             <p style="margin:0 0 12px"><strong>Novo pedido pago</strong> no site.</p>
             <p style="margin:0 0 4px">Cliente: ${order.firstName} ${order.lastName}</p>
-            <p style="margin:0 0 4px">Email: ${order.email}</p>
             $cpfLine
+            <p style="margin:0 0 4px">Email: ${order.email}</p>
+            <!-- ALTERADO: incluir WhatsApp do cliente com máscara e link -->
+            <p style="margin:0 0 4px">WhatsApp: <a href="$waHref">$maskedPhone</a></p>
+            
             <p style="margin:0 0 4px">Endereço: $addressLine</p>
             $noteBlock
         """.trimIndent()
@@ -102,7 +118,7 @@ class EmailService(
         val contactBlock = """
             <p style="margin:16px 0 0;color:#555">
               Em caso de dúvida ou cancelamento, entre em contato com <strong>Agenor Gasparetto</strong><br>
-              Email: <a href="mailto:ag1957@gmail.com">ag1957@gmail.com</a> · WhatsApp: <a href="https://wa.me/5571994105740">(71) 99410‑5740</a>
+              Email: <a href="mailto:ag1957@gmail.com">ag1957@gmail.com</a> · WhatsApp: <a href="https://wa.me/5571994105740">(71) 99410-5740</a>
             </p>
         """.trimIndent()
 
@@ -143,9 +159,25 @@ class EmailService(
         """.trimIndent()
     }
 
-    private fun maskCpf(raw: String): String {
-        val d = raw.filter { it.isDigit() }.padStart(11, '0').takeLast(11)
-        return "${d.substring(0,3)}.${d.substring(3,6)}.${d.substring(6,9)}-${d.substring(9,11)}"
+    // Helpers
+
+    private fun onlyDigits(s: String?): String = s?.filter { it.isDigit() } ?: ""
+
+    private fun normalizeBrPhone(digits: String): String =
+        when {
+            digits.length >= 13 && digits.startsWith("55") -> digits.takeLast(11)
+            digits.length >= 11 -> digits.takeLast(11)
+            else -> digits
+        }
+
+    private fun maskCelularBr(src: String): String {
+        val d = onlyDigits(src).let { normalizeBrPhone(it) }
+        return when {
+            d.length <= 2 -> "(${d}"
+            d.length <= 7 -> "(${d.substring(0, 2)})${d.substring(2)}"
+            d.length <= 11 -> "(${d.substring(0, 2)})${d.substring(2, 7)}-${d.substring(7)}"
+            else -> "(${d.substring(0, 2)})${d.substring(2, 7)}-${d.substring(7, 11)}"
+        }
     }
 
     private fun escapeHtml(s: String): String =
