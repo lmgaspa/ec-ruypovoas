@@ -37,7 +37,7 @@ const CheckoutForm = (props: CheckoutFormProps) => {
       "city",
       "state",
       "email",
-      "phone"
+      "phone",
     ];
 
     const missingField = requiredFields.find(
@@ -51,12 +51,18 @@ const CheckoutForm = (props: CheckoutFormProps) => {
 
     const cpfDigits = props.form.cpf.replace(/\D/g, "");
     const cepDigits = props.form.cep.replace(/\D/g, "");
+    const phoneDigits = props.form.phone.replace(/\D/g, "");
+
     if (cpfDigits.length !== 11) {
       alert("CPF inválido.");
       return;
     }
     if (cepDigits.length !== 8) {
       alert("CEP inválido.");
+      return;
+    }
+    if (phoneDigits.length !== 11 || phoneDigits[2] !== "9") {
+      alert("Celular inválido. Use o formato (xx)9xxxx-xxxx.");
       return;
     }
 

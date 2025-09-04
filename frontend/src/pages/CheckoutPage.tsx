@@ -47,7 +47,9 @@ const CheckoutPage = () => {
     (async () => {
       const ids = cart.map((c) => c.id);
       const stockMap = await getStockByIds(ids);
-      const stockDict = Object.fromEntries(ids.map((id) => [id, Math.max(0, stockMap[id]?.stock ?? 0)]));
+      const stockDict = Object.fromEntries(
+        ids.map((id) => [id, Math.max(0, stockMap[id]?.stock ?? 0)])
+      );
       setStockById(stockDict);
       const fixed = cart
         .map((i) => {
@@ -57,13 +59,19 @@ const CheckoutPage = () => {
         })
         .filter((i) => i.quantity > 0);
 
-      const sum = fixed.reduce((acc, item) => acc + item.price * item.quantity, 0);
+      const sum = fixed.reduce(
+        (acc, item) => acc + item.price * item.quantity,
+        0
+      );
 
       setCartItems(fixed);
       setTotal(sum);
       localStorage.setItem("cart", JSON.stringify(fixed));
 
-      if (fixed.length !== cart.length || JSON.stringify(fixed) !== JSON.stringify(cart)) {
+      if (
+        fixed.length !== cart.length ||
+        JSON.stringify(fixed) !== JSON.stringify(cart)
+      ) {
         alert("Atualizamos seu carrinho de acordo com o estoque atual.");
       }
     })();
@@ -73,16 +81,24 @@ const CheckoutPage = () => {
   const cpfCepInfo = useMemo(() => {
     const cpf = form.cpf.replace(/\D/g, "");
     const cep = form.cep.replace(/\D/g, "");
-    return { cpf, cep };
-  }, [form.cpf, form.cep]);
+    const phone = form.phone.replace(/\D/g, "");
+    return { cpf, cep, phone };
+  }, [form.cpf, form.cep, form.phone]);
 
   useEffect(() => {
-    if (cpfCepInfo.cpf === "00000000000" || cpfCepInfo.cep.length !== 8 || cartItems.length === 0) {
+    if (
+      cpfCepInfo.cpf === "00000000000" ||
+      cpfCepInfo.cep.length !== 8 ||
+      cartItems.length === 0
+    ) {
       setShipping(0);
       return;
     }
 
-    calcularFreteComBaseEmCarrinho({ cpf: cpfCepInfo.cpf, cep: cpfCepInfo.cep }, cartItems)
+    calcularFreteComBaseEmCarrinho(
+      { cpf: cpfCepInfo.cpf, cep: cpfCepInfo.cep },
+      cartItems
+    )
       .then(setShipping)
       .catch(() => setShipping(0));
   }, [cpfCepInfo, cartItems]);
@@ -108,7 +124,10 @@ const CheckoutPage = () => {
 
     setCartItems(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
-    const sum = updated.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const sum = updated.reduce(
+      (acc, item) => acc + item.price * item.quantity,
+      0
+    );
     setTotal(sum);
   };
 
@@ -116,12 +135,17 @@ const CheckoutPage = () => {
     const updated = cartItems.filter((item) => item.id !== id);
     setCartItems(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
-    const sum = updated.reduce((acc, item) => acc + item.price * item.quantity, 0);
+    const sum = updated.reduce(
+      (acc, item) => acc + item.price * item.quantity,
+      0
+    );
     setTotal(sum);
     if (updated.length === 0) setShipping(0);
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value: inputValue } = e.target;
     let value = inputValue;
 
