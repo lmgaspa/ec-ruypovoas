@@ -75,7 +75,7 @@ class EmailSenderService(
             """.trimIndent()
         } ?: ""
 
-        // 🔴 REMOVIDO: não exibimos mais o CPF no email do cliente
+        // 🔴 CPF removido: não exibimos CPF no e-mail do cliente.
 
         val headerClient = """
             <p style="margin:0 0 12px">Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
@@ -88,12 +88,7 @@ class EmailSenderService(
             "<p style=\"margin:0 0 8px\"><strong>TXID Pix:</strong> $it</p>"
         } ?: ""
 
-        val contactBlock = """
-            <p style="margin:16px 0 0;color:#555">
-              Em caso de dúvida ou cancelamento, entre em contato com <strong>Agenor Gasparetto</strong><br>
-              Email: <a href="mailto:ag1957@gmail.com">ag1957@gmail.com</a> · WhatsApp: <a href="https://wa.me/5571994105740">(71) 99410-5740</a>
-            </p>
-        """.trimIndent()
+        // 🔴 Bloco de contato removido conforme solicitado.
 
         return """
         <html>
@@ -120,8 +115,6 @@ class EmailSenderService(
               </div>
 
               <p style="margin:16px 0 0">Obrigado por comprar com a gente! 💛</p>
-
-              $contactBlock
             </div>
             <div style="background:#fafafa;color:#888;padding:12px 20px;text-align:center;font-size:12px">
               © ${java.time.Year.now()} Agenor Gasparetto. Todos os direitos reservados.

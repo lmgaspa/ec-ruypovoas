@@ -10,7 +10,6 @@ import jakarta.mail.internet.MimeMessage
 
 /**
  * Envia e-mail para o AUTOR (quem recebe o aviso de novo pedido pago).
- * (Desmembrado a partir do EmailService original)
  */
 @Service
 class EmailReceiverService(
@@ -36,17 +35,11 @@ class EmailReceiverService(
         }
     }
 
-    // =========================
-    // Mantido: mesmo HTML do serviço anterior
-    // ALTERADO: inclui WhatsApp com máscara/link no header do autor
-    // ALTERADO: CPF sem máscara
-    // =========================
     private fun buildHtmlMessage(order: Order, isAuthor: Boolean): String {
         val total = "R$ %.2f".format(order.total.toDouble())
         val shipping = if (order.shipping > java.math.BigDecimal.ZERO)
             "R$ %.2f".format(order.shipping.toDouble()) else "Grátis"
 
-        // ALTERADO: preparar WhatsApp do cliente (a partir do phone vindo do front)
         val phoneDigits = onlyDigits(order.phone)
         val nationalPhone = normalizeBrPhone(phoneDigits)
         val maskedPhone = maskCelularBr(nationalPhone.ifEmpty { order.phone })
@@ -89,10 +82,7 @@ class EmailReceiverService(
             """.trimIndent()
         } ?: ""
 
-        // ALTERADO: CPF sem máscara
-        val cpfLine = order.cpf.takeIf { it.isNotBlank() }?.let {
-            "<p style=\"margin:0 0 4px\">CPF: ${escapeHtml(it)}</p>"
-        } ?: ""
+        // 🔴 CPF REMOVIDO: não exibimos mais no e-mail do autor
 
         val headerClient = """
             <p style="margin:0 0 12px">Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
@@ -103,9 +93,7 @@ class EmailReceiverService(
         val headerAuthor = """
             <p style="margin:0 0 12px"><strong>Novo pedido pago</strong> no site.</p>
             <p style="margin:0 0 4px">Cliente: ${order.firstName} ${order.lastName}</p>
-            $cpfLine
             <p style="margin:0 0 4px">Email: ${order.email}</p>
-            <!-- ALTERADO: incluir WhatsApp do cliente com máscara e link -->
             <p style="margin:0 0 4px">WhatsApp: <a href="$waHref">$maskedPhone</a></p>
             
             <p style="margin:0 0 4px">Endereço: $addressLine</p>
