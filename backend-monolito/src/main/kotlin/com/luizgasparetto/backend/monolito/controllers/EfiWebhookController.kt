@@ -1,7 +1,9 @@
 package com.luizgasparetto.backend.monolito.controllers
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.luizgasparetto.backend.monolito.models.WebhookEvent
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
+import com.luizgasparetto.backend.monolito.repositories.WebhookEventRepository
 import com.luizgasparetto.backend.monolito.services.BookService
 import com.luizgasparetto.backend.monolito.services.EmailService
 import com.luizgasparetto.backend.monolito.services.OrderEventsPublisher
@@ -17,7 +19,8 @@ class EfiWebhookController(
     private val emailService: EmailService,
     private val bookService: BookService,
     private val mapper: ObjectMapper,
-    private val events: OrderEventsPublisher
+    private val events: OrderEventsPublisher,
+    private val webhookRepo: WebhookEventRepository // <-- injete o repo
 ) {
     private val log = LoggerFactory.getLogger(EfiWebhookController::class.java)
 
@@ -43,6 +46,9 @@ class EfiWebhookController(
             pix0 != null && !pix0.path("status").isMissingNode -> pix0.path("status").asText()
             else -> null
         }
+
+        // Salva o evento bruto pra auditoria
+        webhookRepo.save(WebhookEvent(txid = txid, status = status, rawBody = rawBody))
 
         log.info("EFI WEBHOOK PARSED txid={}, status={}", txid, status)
         if (txid == null) return ResponseEntity.ok("⚠️ Ignorado: txid ausente")

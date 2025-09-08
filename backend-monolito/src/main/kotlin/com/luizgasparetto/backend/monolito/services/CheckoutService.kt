@@ -23,6 +23,7 @@ class CheckoutService(
     private val orderRepository: OrderRepository,
     private val mapper: ObjectMapper,
     private val bookService: BookService,
+    private val pixWatcher: PixWatcher,
     @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
     @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,
     @Value("\${efi.pix.chave}") private val chavePix: String
@@ -75,6 +76,9 @@ class CheckoutService(
 
         // ----- TX 2: grava QR no pedido (+ opcional: baixa estoque)
         updateOrderWithQrAndStockTx(order.id!!, qrCode, qrCodeBase64)
+
+        // >>> inicia polling para este txid <<<
+        pixWatcher.watch(txid)
 
         log.info("CHECKOUT OK: orderId={}, txid={}, qrLen={}, imgLen={}", order.id, txid, qrCode.length, qrCodeBase64.length)
         return CheckoutResponse(
