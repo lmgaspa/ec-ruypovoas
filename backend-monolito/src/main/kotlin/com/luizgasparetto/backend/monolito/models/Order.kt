@@ -53,11 +53,13 @@ data class Order(
 
     // ---- novos campos para reserva/pagamento ----
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, columnDefinition = "varchar(32) NOT NULL DEFAULT 'CRIADO'")
+    @Column(nullable = false, length = 32)
     var status: OrderStatus = OrderStatus.CRIADO,
 
+    @Column(name = "reserve_expires_at")
     var reserveExpiresAt: OffsetDateTime? = null,
 
+    @Column(name = "paid_at")
     var paidAt: OffsetDateTime? = null,
 
     @OneToMany(
