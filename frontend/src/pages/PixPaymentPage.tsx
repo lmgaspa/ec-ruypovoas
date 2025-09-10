@@ -30,24 +30,31 @@ export default function PixPaymentPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // TTL / expiração
-  const [expiresAtMs, setExpiresAtMs] = useState<number | null>(null);
-  const [remainingSec, setRemainingSec] = useState<number>(0);
-
   const sseRef = useRef<EventSource | null>(null);
   const retryTimerRef = useRef<number | null>(null);
-  const timerRef = useRef<number | null>(null);
   const backoffRef = useRef(1500);
   const isMountedRef = useRef(true);
+
+  // Helpers para evitar try/catch vazios
+  const closeSSE = () => {
+    if (sseRef.current) {
+      sseRef.current.close();
+      sseRef.current = null;
+    }
+  };
+  const clearRetryTimer = () => {
+    if (retryTimerRef.current) {
+      window.clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  };
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
-      try { sseRef.current?.close(); } catch {}
-      sseRef.current = null;
-      if (retryTimerRef.current) { window.clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
-      if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+      closeSSE();
+      clearRetryTimer();
     };
   }, []);
 
@@ -72,17 +79,28 @@ export default function PixPaymentPage() {
     if (!savedForm || cartItems.length === 0) return;
     const form = JSON.parse(savedForm);
     calcularFreteComBaseEmCarrinho({ cep: form.cep, cpf: form.cpf }, cartItems)
-      .then((v) => { if (isMountedRef.current) setFrete(v); })
-      .catch(() => { if (isMountedRef.current) setFrete(0); });
+      .then((v) => {
+        if (isMountedRef.current) setFrete(v);
+      })
+      .catch(() => {
+        if (isMountedRef.current) setFrete(0);
+      });
   }, [cartItems]);
 
-  // Gera pedido + QR + reserva
+  // TTL / expiração do QR/reserva
+  const [expiresAtMs, setExpiresAtMs] = useState<number | null>(null);
+  const [remainingSec, setRemainingSec] = useState<number>(0);
+  const timerRef = useRef<number | null>(null);
+
   useEffect(() => {
     const run = async () => {
       if (frete === null || cartItems.length === 0 || orderId) return;
 
       const savedForm = localStorage.getItem("checkoutForm");
-      if (!savedForm) { navigate("/checkout"); return; }
+      if (!savedForm) {
+        navigate("/checkout");
+        return;
+      }
       const form = JSON.parse(savedForm);
 
       setLoading(true);
@@ -115,7 +133,6 @@ export default function PixPaymentPage() {
 
         if (!res.ok) {
           const text = await res.text();
-          // 409/422 = item reservado/indisponível
           if (res.status === 409 || res.status === 422) {
             setErrorMsg("Indisponível no momento. Outro cliente reservou este item.");
             setTimeout(() => navigate("/"), 2000);
@@ -136,7 +153,7 @@ export default function PixPaymentPage() {
         setPixCopiaECola(data.qrCode || "");
         setOrderId(String(data.orderId || ""));
 
-        // TTL/expiração: usa reserveExpiresAt (ISO) ou ttlSeconds, com fallback 15min
+        // Expiração (usa reserveExpiresAt ou ttlSeconds, fallback 15 min)
         let expMs: number | null = null;
         if (data.reserveExpiresAt) {
           const t = Date.parse(data.reserveExpiresAt);
@@ -147,10 +164,10 @@ export default function PixPaymentPage() {
           expMs = Date.now() + 15 * 60 * 1000;
         }
         setExpiresAtMs(expMs);
-
-      } catch (e: any) {
-        console.error(e);
-        setErrorMsg(e?.message || "Erro ao gerar QR Code.");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error(msg);
+        setErrorMsg(msg || "Erro ao gerar QR Code.");
       } finally {
         if (isMountedRef.current) setLoading(false);
       }
@@ -161,55 +178,68 @@ export default function PixPaymentPage() {
   // Contador regressivo
   useEffect(() => {
     if (!expiresAtMs) return;
-    if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+    if (timerRef.current) {
+      window.clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
 
     const tick = () => {
       const sec = Math.max(0, Math.floor((expiresAtMs - Date.now()) / 1000));
       setRemainingSec(sec);
       if (sec <= 0) {
-        // expirou: encerra SSE, limpa QR e avisa
-        try { sseRef.current?.close(); } catch {}
-        sseRef.current = null;
-        if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+        closeSSE();
+        if (timerRef.current) {
+          window.clearInterval(timerRef.current);
+          timerRef.current = null;
+        }
       }
     };
     tick();
     timerRef.current = window.setInterval(tick, 1000);
 
     return () => {
-      if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
     };
   }, [expiresAtMs]);
 
   const connectSSE = (id: string) => {
-    try { sseRef.current?.close(); } catch {}
-    sseRef.current = null;
-
+    closeSSE();
     const url = `${API_BASE}/api/orders/${id}/events`;
     const es = new EventSource(url, { withCredentials: false });
     sseRef.current = es;
 
-    const resetBackoff = () => { backoffRef.current = 1500; };
+    const resetBackoff = () => {
+      backoffRef.current = 1500;
+    };
+
     es.addEventListener("open", resetBackoff);
-    es.addEventListener("ping", () => { /* keep-alive */ });
+    es.addEventListener("ping", () => { /* keep-alive tick */ });
 
     es.addEventListener("paid", () => {
-      try { es.close(); sseRef.current = null; } catch {}
-      if (timerRef.current) { window.clearInterval(timerRef.current); timerRef.current = null; }
+      closeSSE();
+      if (timerRef.current) {
+        window.clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
       localStorage.removeItem("cart");
       const nf = JSON.parse(localStorage.getItem("checkoutForm") || "{}");
       const fn = [nf.firstName, nf.lastName].filter(Boolean).join(" ").trim();
-      navigate(`/pedido-confirmado?orderId=${id}${fn ? `&name=${encodeURIComponent(fn)}` : ""}`);
+      navigate(
+        `/pedido-confirmado?orderId=${id}${fn ? `&name=${encodeURIComponent(fn)}` : ""}`
+      );
     });
 
     es.onerror = () => {
-      try { es.close(); } catch {}
-      sseRef.current = null;
+      closeSSE();
       const wait = Math.min(backoffRef.current, 10000);
-      if (retryTimerRef.current) { window.clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+      clearRetryTimer();
       retryTimerRef.current = window.setTimeout(() => {
         backoffRef.current = Math.min(backoffRef.current * 2, 10000);
-        if (isMountedRef.current && orderId === id && (remainingSec > 0)) {
+        const notExpired = expiresAtMs === null || Date.now() < expiresAtMs;
+        if (isMountedRef.current && orderId === id && notExpired) {
           connectSSE(id);
         }
       }, wait);
@@ -220,14 +250,15 @@ export default function PixPaymentPage() {
     if (!orderId) return;
     connectSSE(orderId);
     return () => {
-      try { sseRef.current?.close(); } catch {}
-      sseRef.current = null;
-      if (retryTimerRef.current) { window.clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
+      closeSSE();
+      clearRetryTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderId]);
 
-  const handleReviewClick = () => navigate("/checkout");
+  const handleReviewClick = () => {
+    navigate("/checkout");
+  };
 
   const isExpired = expiresAtMs !== null && remainingSec <= 0;
 
@@ -243,8 +274,15 @@ export default function PixPaymentPage() {
 
       <div className="space-y-4">
         {cartItems.map((item) => (
-          <div key={item.id} className="border p-4 rounded shadow-sm flex gap-4 items-center">
-            <img src={item.imageUrl} alt={item.title} className="w-24 h-auto object-contain" />
+          <div
+            key={item.id}
+            className="border p-4 rounded shadow-sm flex gap-4 items-center"
+          >
+            <img
+              src={item.imageUrl}
+              alt={item.title}
+              className="w-24 h-auto object-contain"
+            />
             <div>
               <p className="font-medium">{item.title}</p>
               <p>Quantidade: {item.quantity}</p>
@@ -258,29 +296,44 @@ export default function PixPaymentPage() {
       <div className="mt-6 text-right space-y-2">
         <p className="text-lg">Subtotal: {formatPrice(totalProdutos)}</p>
         <p className="text-lg">Frete: {formatPrice(frete ?? 0)}</p>
-        <p className="text-xl font-bold">Total com Frete: {formatPrice(totalComFrete)}</p>
+        <p className="text-xl font-bold">
+          Total com Frete: {formatPrice(totalComFrete)}
+        </p>
       </div>
 
       <div className="mt-8 flex justify-between">
-        <button onClick={handleReviewClick} className="bg-gray-300 hover:bg-gray-400 text-black px-4 py-2 rounded">
+        <button
+          onClick={handleReviewClick}
+          className="bg-gray-300 hover:bg-gray-400 text-black px-4 py-2 rounded"
+        >
           Revisar compra
         </button>
         <span className="text-sm text-gray-500 self-center" />
       </div>
 
-      {loading && <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>}
+      {loading && (
+        <p className="text-center mt-8 text-gray-600">Gerando QR Code Pix...</p>
+      )}
 
       {qrCodeImg && (
         <div className="mt-10 text-center space-y-3">
           {!isExpired ? (
             <>
-              <p className="text-lg font-medium">Escaneie o QR Code com seu app do banco:</p>
+              <p className="text-lg font-medium">
+                Escaneie o QR Code com seu app do banco:
+              </p>
               <img src={qrCodeImg} alt="QR Code Pix" className="mx-auto" />
               {pixCopiaECola && (
                 <div className="max-w-xl mx-auto">
-                  <p className="mt-4 text-sm text-gray-700">Ou copie e cole no seu app:</p>
+                  <p className="mt-4 text-sm text-gray-700">
+                    Ou copie e cole no seu app:
+                  </p>
                   <div className="flex gap-2 items-center mt-1">
-                    <input readOnly value={pixCopiaECola} className="flex-1 border rounded px-2 py-1 text-xs" />
+                    <input
+                      readOnly
+                      value={pixCopiaECola}
+                      className="flex-1 border rounded px-2 py-1 text-xs"
+                    />
                     <button
                       onClick={() => navigator.clipboard.writeText(pixCopiaECola)}
                       className="bg-black text-white px-3 py-1 rounded text-sm"
@@ -292,14 +345,17 @@ export default function PixPaymentPage() {
               )}
               {expiresAtMs && (
                 <p className="text-sm text-gray-600 mt-2">
-                  Este QR expira em <span className="font-semibold">{formatMMSS(remainingSec)}</span>.
+                  Este QR expira em{" "}
+                  <span className="font-semibold">{formatMMSS(remainingSec)}</span>.
                 </p>
               )}
             </>
           ) : (
             <div className="p-4 border rounded bg-yellow-50 text-yellow-800 inline-block">
               <p className="font-medium">Reserva expirada</p>
-              <p className="text-sm">O tempo para pagamento acabou. Gere um novo pedido para tentar novamente.</p>
+              <p className="text-sm">
+                O tempo para pagamento acabou. Gere um novo pedido para tentar novamente.
+              </p>
               <button
                 className="mt-3 bg-black text-white px-4 py-2 rounded"
                 onClick={() => navigate("/checkout")}
