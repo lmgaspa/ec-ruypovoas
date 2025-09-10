@@ -52,6 +52,9 @@ server:
     mime-types: application/json, text/html, text/plain
   # (opcional, útil no Heroku/NGINX para pegar scheme/host corretos)
   forward-headers-strategy: framework
+  error:
+    include-message: always
+    include-binding-errors: always
 
 logging:
   level:
