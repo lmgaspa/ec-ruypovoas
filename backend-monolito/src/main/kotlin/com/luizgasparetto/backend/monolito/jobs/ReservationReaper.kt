@@ -23,12 +23,17 @@ class ReservationReaper(
         val expired = orderRepository.findExpiredReservations(now, OrderStatus.RESERVADO)
         if (expired.isEmpty()) return
 
+        var released = 0
         expired.forEach { order ->
-            order.items.forEach { item -> bookService.release(item.bookId, item.quantity) }
+            order.items.forEach { item ->
+                bookService.release(item.bookId, item.quantity)
+                released += item.quantity
+            }
             order.status = OrderStatus.RESERVA_EXPIRADA
             order.reserveExpiresAt = null
             orderRepository.save(order)
             log.info("RESERVA EXPIRADA: orderId={} liberada", order.id)
         }
+        log.info("REAPER: pedidos expirados processados={}, unidades devolvidas={}", expired.size, released)
     }
 }

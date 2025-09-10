@@ -1,18 +1,24 @@
 spring:
   datasource:
-    url: ${DATABASE_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    # Usa JDBC_* do Heroku se existir; senão, cai no seu DATABASE_URL
+    url: ${JDBC_DATABASE_URL:${DATABASE_URL}}
+    username: ${JDBC_DATABASE_USERNAME:${DB_USERNAME}}
+    password: ${JDBC_DATABASE_PASSWORD:${DB_PASSWORD}}
     driver-class-name: org.postgresql.Driver
+    hikari:
+    # (opcional) propriedades extras
+    # data-source-properties:
+    #   sslmode: require
 
   jpa:
     hibernate:
       ddl-auto: update
+    open-in-view: false         # ✅ remove o warning e é mais seguro em prod
     show-sql: false
     properties:
       hibernate:
         format_sql: true
-        jdbc.time_zone: UTC   # (opcional, bom p/ OffsetDateTime)
+        jdbc.time_zone: UTC
 
   mvc:
     async:
@@ -33,7 +39,7 @@ spring:
           starttls:
             enable: true
 
-  task:                         # NEW (opcional: pool do scheduler)
+  task:
     scheduling:
       pool:
         size: 2
@@ -44,13 +50,15 @@ server:
   compression:
     enabled: true
     mime-types: application/json, text/html, text/plain
+  # (opcional, útil no Heroku/NGINX para pegar scheme/host corretos)
+  forward-headers-strategy: framework
 
 logging:
   level:
     org.hibernate: warn
     org.hibernate.orm.connections.pooling: warn
     com.zaxxer.hikari: warn
-    # com.luizgasparetto.backend.monolito: info   # (opcional p/ ver logs do fluxo)
+    # com.luizgasparetto.backend.monolito: info   # (ligue se quiser ver logs do reaper)
 
 email:
   author: ${EMAIL_AUTHOR}
@@ -70,8 +78,7 @@ springdoc:
   swagger-ui.display-request-duration: true
   swagger-ui.try-it-out-enabled: true
 
-# NEW — configurações da reserva
 checkout:
   reserve:
-    ttl-seconds: ${CHECKOUT_RESERVE_TTL_SECONDS:900}  # 15 min (usado no QR e na reserva)
-    reaper-ms:  ${CHECKOUT_RESERVE_REAPER_MS:60000}   # job roda a cada 60s
+    ttl-seconds: ${CHECKOUT_RESERVE_TTL_SECONDS:900}   # 15 min
+    reaper-ms:  ${CHECKOUT_RESERVE_REAPER_MS:60000}   # 60 s
