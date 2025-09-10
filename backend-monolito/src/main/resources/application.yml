@@ -12,6 +12,7 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        jdbc.time_zone: UTC   # (opcional, bom p/ OffsetDateTime)
 
   mvc:
     async:
@@ -32,6 +33,11 @@ spring:
           starttls:
             enable: true
 
+  task:                         # NEW (opcional: pool do scheduler)
+    scheduling:
+      pool:
+        size: 2
+
 server:
   port: ${PORT:${SERVER_PORT:8080}}
   shutdown: graceful
@@ -44,6 +50,7 @@ logging:
     org.hibernate: warn
     org.hibernate.orm.connections.pooling: warn
     com.zaxxer.hikari: warn
+    # com.luizgasparetto.backend.monolito: info   # (opcional p/ ver logs do fluxo)
 
 email:
   author: ${EMAIL_AUTHOR}
@@ -62,3 +69,9 @@ springdoc:
   swagger-ui.path: /swagger
   swagger-ui.display-request-duration: true
   swagger-ui.try-it-out-enabled: true
+
+# NEW — configurações da reserva
+checkout:
+  reserve:
+    ttl-seconds: ${CHECKOUT_RESERVE_TTL_SECONDS:900}  # 15 min (usado no QR e na reserva)
+    reaper-ms:  ${CHECKOUT_RESERVE_REAPER_MS:60000}   # job roda a cada 60s

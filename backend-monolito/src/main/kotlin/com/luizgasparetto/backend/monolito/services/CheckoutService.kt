@@ -5,16 +5,17 @@ import com.luizgasparetto.backend.monolito.dto.CheckoutRequest
 import com.luizgasparetto.backend.monolito.dto.CheckoutResponse
 import com.luizgasparetto.backend.monolito.models.Order
 import com.luizgasparetto.backend.monolito.models.OrderItem
+import com.luizgasparetto.backend.monolito.models.OrderStatus
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.*
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestTemplate
-import java.math.BigDecimal
-import java.util.*
 import org.springframework.beans.factory.annotation.Qualifier
-
 import org.springframework.transaction.annotation.Transactional
+import java.math.BigDecimal
+import java.time.OffsetDateTime
+import java.util.UUID
 
 @Service
 class CheckoutService(
@@ -26,22 +27,54 @@ class CheckoutService(
     private val pixWatcher: PixWatcher,
     @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
     @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,
-    @Value("\${efi.pix.chave}") private val chavePix: String
+    @Value("\${efi.pix.chave}") private val chavePix: String,
+    @Value("\${checkout.reserve.ttl-seconds:900}") private val reserveTtlSeconds: Long
 ) {
     private val log = org.slf4j.LoggerFactory.getLogger(CheckoutService::class.java)
 
     fun processCheckout(request: CheckoutRequest): CheckoutResponse {
-        request.cartItems.forEach { item ->
-            bookService.validateStock(item.id, item.quantity)
-        }
-        
-        val totalAmount = calculateTotalAmount(request)
-        val txid = java.util.UUID.randomUUID().toString().replace("-", "").take(35)
+        request.cartItems.forEach { item -> bookService.validateStock(item.id, item.quantity) }
 
-        // ----- TX 1: cria pedido + itens
+        val totalAmount = calculateTotalAmount(request)
+        val txid = UUID.randomUUID().toString().replace("-", "").take(35)
+
+        // 1) Cria pedido + itens
         val order = createOrderTx(request, totalAmount, txid)
 
-        // ----- Chama Efí (fora de TX)
+        // 2) Reserva estoque + TTL
+        reserveItemsTx(order, reserveTtlSeconds)
+
+        // 3) Chama Efí (fora de TX). Se falhar, libera a reserva.
+        val qr = try {
+            createPixQr(totalAmount, request, txid)
+        } catch (e: Exception) {
+            log.error("Falha ao criar QR na Efí, liberando reserva. orderId={}, txid={}, err={}",
+                order.id, txid, e.message, e)
+            releaseReservationTx(order.id!!)
+            throw e
+        }
+
+        // 4) Grava QR
+        updateOrderWithQrTx(order.id!!, qr.qrCode, qr.qrCodeBase64)
+
+        // 5) Inicia watcher/SSE
+        pixWatcher.watch(txid)
+
+        log.info("CHECKOUT OK: orderId={}, txid={}, qrLen={}, imgLen={}", order.id, txid, qr.qrCode.length, qr.qrCodeBase64.length)
+        return CheckoutResponse(
+            qrCode = qr.qrCode,
+            qrCodeBase64 = qr.qrCodeBase64,
+            message = "Pedido gerado com sucesso",
+            orderId = order.id.toString(),
+            txid = txid,
+            reserveExpiresAt = order.reserveExpiresAt?.toString(),
+            ttlSeconds = reserveTtlSeconds
+        )
+    }
+
+    data class QrPayload(val qrCode: String, val qrCodeBase64: String)
+
+    private fun createPixQr(totalAmount: BigDecimal, request: CheckoutRequest, txid: String): QrPayload {
         val baseUrl = if (sandbox) "https://pix-h.api.efipay.com.br" else "https://pix.api.efipay.com.br"
         val token = efiAuthService.getAccessToken()
         val headers = HttpHeaders().apply {
@@ -50,7 +83,7 @@ class CheckoutService(
         }
         val cpfNum = request.cpf.replace(Regex("[^\\d]"), "").takeIf { it.isNotBlank() }
         val cobrancaBody = buildMap<String, Any> {
-            put("calendario", mapOf("expiracao" to 3600))
+            put("calendario", mapOf("expiracao" to reserveTtlSeconds.toInt()))
             put("valor", mapOf("original" to totalAmount.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString()))
             put("chave", chavePix)
             put("solicitacaoPagador", "Pedido $txid")
@@ -73,21 +106,7 @@ class CheckoutService(
         val qrJson = objectMapper.readTree(qrResp.body)
         val qrCode = qrJson.path("qrcode").asText().takeIf { it.isNotBlank() } ?: error("QR Code não encontrado ou vazio")
         val qrCodeBase64 = qrJson.path("imagemQrcode").asText("")
-
-        // ----- TX 2: grava QR no pedido (+ opcional: baixa estoque)
-        updateOrderWithQrAndStockTx(order.id!!, qrCode, qrCodeBase64)
-
-        // >>> inicia polling para este txid <<<
-        pixWatcher.watch(txid)
-
-        log.info("CHECKOUT OK: orderId={}, txid={}, qrLen={}, imgLen={}", order.id, txid, qrCode.length, qrCodeBase64.length)
-        return CheckoutResponse(
-            qrCode = qrCode,
-            qrCodeBase64 = qrCodeBase64,
-            message = "Pedido gerado com sucesso",
-            orderId = order.id.toString(),
-            txid = txid
-        )
+        return QrPayload(qrCode, qrCodeBase64)
     }
 
     @Transactional
@@ -110,7 +129,8 @@ class CheckoutService(
             shipping  = request.shipping.toBigDecimal(),
             paid      = false,
             txid      = txid,
-            items     = mutableListOf()
+            items     = mutableListOf(),
+            status    = OrderStatus.CRIADO
         )
 
         order.items = request.cartItems.map {
@@ -129,15 +149,39 @@ class CheckoutService(
         return saved
     }
 
+    /** Reserva todos os itens do pedido e define TTL da reserva. */
     @Transactional
-    fun updateOrderWithQrAndStockTx(orderId: Long, qrCode: String, qrB64: String) {
+    fun reserveItemsTx(order: Order, ttlSeconds: Long) {
+        order.items.forEach { item ->
+            bookService.reserveOrThrow(item.bookId, item.quantity)
+        }
+        order.status = OrderStatus.RESERVADO
+        order.reserveExpiresAt = OffsetDateTime.now().plusSeconds(ttlSeconds)
+        orderRepository.save(order)
+        log.info("RESERVA: orderId={} ttl={}s expiraEm={}", order.id, ttlSeconds, order.reserveExpiresAt)
+    }
+
+    /** Libera a reserva de um pedido (usado se falhar emissão de QR). */
+    @Transactional
+    fun releaseReservationTx(orderId: Long) {
         val order = orderRepository.findById(orderId)
             .orElseThrow { IllegalStateException("Order $orderId não encontrado") }
+        if (order.status == OrderStatus.RESERVADO && order.paid == false) {
+            order.items.forEach { item -> bookService.release(item.bookId, item.quantity) }
+            order.status = OrderStatus.RESERVA_EXPIRADA
+            order.reserveExpiresAt = null
+            orderRepository.save(order)
+            log.info("RESERVA LIBERADA: orderId={}", orderId)
+        }
+    }
 
+    @Transactional
+    fun updateOrderWithQrTx(orderId: Long, qrCode: String, qrB64: String) {
+        val order = orderRepository.findById(orderId)
+            .orElseThrow { IllegalStateException("Order $orderId não encontrado") }
         order.qrCode = qrCode
         order.qrCodeBase64 = qrB64
         orderRepository.save(order)
-
         log.info("TX2: QR gravado. orderId={}", orderId)
     }
 

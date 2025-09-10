@@ -5,7 +5,12 @@ import java.math.BigDecimal
 import java.time.OffsetDateTime
 
 @Entity
-@Table(name = "orders")
+@Table(
+    name = "orders",
+    indexes = [
+        Index(name = "uk_orders_txid", columnList = "txid", unique = true)
+    ]
+)
 data class Order(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null,
@@ -44,8 +49,22 @@ data class Order(
     var qrCodeBase64: String? = null,
 
     @Column(nullable = false, unique = true, length = 35)
-    var txid: String? = null,
+    var txid: String, // <-- não-nulo (já vem do Checkout)
 
-    @OneToMany(mappedBy = "order", cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.LAZY)
+    // ---- novos campos para reserva/pagamento ----
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(32) NOT NULL DEFAULT 'CRIADO'")
+    var status: OrderStatus = OrderStatus.CRIADO,
+
+    var reserveExpiresAt: OffsetDateTime? = null,
+
+    var paidAt: OffsetDateTime? = null,
+
+    @OneToMany(
+        mappedBy = "order",
+        cascade = [CascadeType.ALL],
+        orphanRemoval = true,
+        fetch = FetchType.LAZY
+    )
     var items: MutableList<OrderItem> = mutableListOf()
 )

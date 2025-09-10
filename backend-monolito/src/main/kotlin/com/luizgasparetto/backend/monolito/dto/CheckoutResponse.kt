@@ -5,6 +5,8 @@ data class CheckoutResponse(
     val qrCodeBase64: String,
     val message: String,
     val orderId: String,
-    val txid: String
+    val txid: String,
+    val reserveExpiresAt: String? = null, // ISO-8601 OffsetDateTime
+    val ttlSeconds: Long? = null
 )
 
