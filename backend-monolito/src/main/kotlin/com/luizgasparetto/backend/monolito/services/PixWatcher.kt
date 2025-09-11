@@ -20,17 +20,22 @@ class PixWatcher(
     // Tentativas (s): 10, 20, 30, 60, 120, 300
     private val delays = listOf(10L, 20L, 30L, 60L, 120L, 300L)
 
-    fun watch(txid: String) {
-        scheduleAttempt(txid, 0)
+    fun watch(txid: String, expireAt: Instant) {
+        scheduleAttempt(txid, 0, expireAt)
     }
 
-    private fun scheduleAttempt(txid: String, attempt: Int) {
+    private fun scheduleAttempt(txid: String, attempt: Int, expireAt: Instant) {
         if (attempt >= delays.size) {
-            log.info("POLL: esgotadas tentativas para txid={}", txid)
-            return
+            log.info("POLL: esgotadas tentativas para txid={}", txid); return
         }
         val delay = delays[attempt]
-        val runAt: Instant = Instant.now().plusSeconds(delay)
+        val runAt = Instant.now().plusSeconds(delay)
+
+        // ❗ não agendar além do TTL (com pequena folga de 10s, opcional)
+        val lastMoment = expireAt.plusSeconds(10)
+        if (runAt.isAfter(lastMoment)) {
+            log.info("POLL: parando (além do TTL) txid={}", txid); return
+        }
 
         log.info("POLL: agendando tentativa {} para txid={} em {}s", attempt + 1, txid, delay)
         scheduler.schedule({
@@ -43,7 +48,7 @@ class PixWatcher(
             } catch (e: Exception) {
                 log.warn("POLL: erro na tentativa {} txid={}: {}", attempt + 1, txid, e.message)
             }
-            scheduleAttempt(txid, attempt + 1)
-        }, runAt) // <-- usa Instant (não Date)
+            scheduleAttempt(txid, attempt + 1, expireAt)
+        }, runAt)
     }
 }

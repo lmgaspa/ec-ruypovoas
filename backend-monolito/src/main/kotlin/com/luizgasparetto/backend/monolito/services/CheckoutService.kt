@@ -58,7 +58,7 @@ class CheckoutService(
         updateOrderWithQrTx(order.id!!, qr.qrCode, qr.qrCodeBase64)
 
         // 5) Inicia watcher/SSE
-        pixWatcher.watch(txid)
+        pixWatcher.watch(txid, order.reserveExpiresAt!!.toInstant())
 
         log.info("CHECKOUT OK: orderId={}, txid={}, qrLen={}, imgLen={}", order.id, txid, qr.qrCode.length, qr.qrCodeBase64.length)
         return CheckoutResponse(
