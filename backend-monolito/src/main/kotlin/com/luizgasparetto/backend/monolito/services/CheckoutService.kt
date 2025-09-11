@@ -28,7 +28,7 @@ class CheckoutService(
     @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
     @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,
     @Value("\${efi.pix.chave}") private val chavePix: String,
-    @Value("\${checkout.reserve.ttl-seconds:900}") private val reserveTtlSeconds: Long
+    @Value("\${checkout.reserve.ttl-seconds:300}") private val reserveTtlSeconds: Long
 ) {
     private val log = org.slf4j.LoggerFactory.getLogger(CheckoutService::class.java)
 

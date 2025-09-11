@@ -83,5 +83,5 @@ springdoc:
 
 checkout:
   reserve:
-    ttl-seconds: ${CHECKOUT_RESERVE_TTL_SECONDS:900}   # 15 min
+    ttl-seconds: ${CHECKOUT_RESERVE_TTL_SECONDS:300}   # 5 min
     reaper-ms:  ${CHECKOUT_RESERVE_REAPER_MS:60000}   # 60 s
