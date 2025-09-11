@@ -8,7 +8,10 @@ import com.luizgasparetto.backend.monolito.models.OrderItem
 import com.luizgasparetto.backend.monolito.models.OrderStatus
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.*
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestTemplate
 import org.springframework.beans.factory.annotation.Qualifier
@@ -22,45 +25,51 @@ class CheckoutService(
     private val efiAuthService: EfiAuthService,
     private val objectMapper: ObjectMapper,
     private val orderRepository: OrderRepository,
-    private val mapper: ObjectMapper,
     private val bookService: BookService,
     private val pixWatcher: PixWatcher,
     @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
     @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,
     @Value("\${efi.pix.chave}") private val chavePix: String,
-    @Value("\${checkout.reserve.ttl-seconds:300}") private val reserveTtlSeconds: Long
+    @Value("\${checkout.reserve.ttl-seconds:900}") private val reserveTtlSeconds: Long
 ) {
     private val log = org.slf4j.LoggerFactory.getLogger(CheckoutService::class.java)
 
     fun processCheckout(request: CheckoutRequest): CheckoutResponse {
+        // 0) valida disponibilidade
         request.cartItems.forEach { item -> bookService.validateStock(item.id, item.quantity) }
 
         val totalAmount = calculateTotalAmount(request)
         val txid = UUID.randomUUID().toString().replace("-", "").take(35)
 
-        // 1) Cria pedido + itens
+        // 1) cria pedido + itens
         val order = createOrderTx(request, totalAmount, txid)
 
-        // 2) Reserva estoque + TTL
+        // 2) reserva estoque + define TTL
         reserveItemsTx(order, reserveTtlSeconds)
 
-        // 3) Chama Efí (fora de TX). Se falhar, libera a reserva.
+        // 3) cria cobrança/QR na Efí (fora de TX). Se falhar, libera reserva.
         val qr = try {
             createPixQr(totalAmount, request, txid)
         } catch (e: Exception) {
-            log.error("Falha ao criar QR na Efí, liberando reserva. orderId={}, txid={}, err={}",
-                order.id, txid, e.message, e)
+            log.error(
+                "Falha ao criar QR na Efí, liberando reserva. orderId={}, txid={}, err={}",
+                order.id, txid, e.message, e
+            )
             releaseReservationTx(order.id!!)
             throw e
         }
 
-        // 4) Grava QR
+        // 4) grava QR no pedido
         updateOrderWithQrTx(order.id!!, qr.qrCode, qr.qrCodeBase64)
 
-        // 5) Inicia watcher/SSE
-        pixWatcher.watch(txid, order.reserveExpiresAt!!.toInstant())
+        // 5) inicia watcher até o TTL
+        val expireAtInstant = requireNotNull(order.reserveExpiresAt) { "reserveExpiresAt nulo após reserva" }.toInstant()
+        pixWatcher.watch(txid, expireAtInstant)
 
-        log.info("CHECKOUT OK: orderId={}, txid={}, qrLen={}, imgLen={}", order.id, txid, qr.qrCode.length, qr.qrCodeBase64.length)
+        log.info(
+            "CHECKOUT OK: orderId={}, txid={}, ttl={}s, expiraEm={}, qrLen={}, imgLen={}",
+            order.id, txid, reserveTtlSeconds, order.reserveExpiresAt, qr.qrCode.length, qr.qrCodeBase64.length
+        )
         return CheckoutResponse(
             qrCode = qr.qrCode,
             qrCodeBase64 = qr.qrCodeBase64,
@@ -71,6 +80,8 @@ class CheckoutService(
             ttlSeconds = reserveTtlSeconds
         )
     }
+
+    // ------------------- privados -------------------
 
     data class QrPayload(val qrCode: String, val qrCodeBase64: String)
 
@@ -91,7 +102,10 @@ class CheckoutService(
         }
 
         val cobrancaResp = restTemplate.exchange(
-            "$baseUrl/v2/cob/$txid", HttpMethod.PUT, HttpEntity(cobrancaBody, headers), String::class.java
+            "$baseUrl/v2/cob/$txid",
+            HttpMethod.PUT,
+            HttpEntity(cobrancaBody, headers),
+            String::class.java
         )
         require(cobrancaResp.statusCode.is2xxSuccessful) { "Falha ao criar cobrança: ${cobrancaResp.statusCode}" }
 
@@ -99,7 +113,10 @@ class CheckoutService(
             ?: error("Campo loc.id não encontrado na resposta da cobrança")
 
         val qrResp = restTemplate.exchange(
-            "$baseUrl/v2/loc/$locId/qrcode", HttpMethod.GET, HttpEntity<Void>(headers), String::class.java
+            "$baseUrl/v2/loc/$locId/qrcode",
+            HttpMethod.GET,
+            HttpEntity<Void>(headers),
+            String::class.java
         )
         require(qrResp.statusCode.is2xxSuccessful) { "Falha ao obter QR Code: ${qrResp.statusCode}" }
 
@@ -152,9 +169,7 @@ class CheckoutService(
     /** Reserva todos os itens do pedido e define TTL da reserva. */
     @Transactional
     fun reserveItemsTx(order: Order, ttlSeconds: Long) {
-        order.items.forEach { item ->
-            bookService.reserveOrThrow(item.bookId, item.quantity)
-        }
+        order.items.forEach { item -> bookService.reserveOrThrow(item.bookId, item.quantity) }
         order.status = OrderStatus.RESERVADO
         order.reserveExpiresAt = OffsetDateTime.now().plusSeconds(ttlSeconds)
         orderRepository.save(order)
@@ -166,7 +181,7 @@ class CheckoutService(
     fun releaseReservationTx(orderId: Long) {
         val order = orderRepository.findById(orderId)
             .orElseThrow { IllegalStateException("Order $orderId não encontrado") }
-        if (order.status == OrderStatus.RESERVADO && order.paid == false) {
+        if (order.status == OrderStatus.RESERVADO && !order.paid) {
             order.items.forEach { item -> bookService.release(item.bookId, item.quantity) }
             order.status = OrderStatus.RESERVA_EXPIRADA
             order.reserveExpiresAt = null

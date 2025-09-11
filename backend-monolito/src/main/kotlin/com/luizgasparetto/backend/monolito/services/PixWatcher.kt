@@ -31,7 +31,7 @@ class PixWatcher(
         val delay = delays[attempt]
         val runAt = Instant.now().plusSeconds(delay)
 
-        // ❗ não agendar além do TTL (com pequena folga de 10s, opcional)
+        // Não agenda além do TTL (+10s de folga)
         val lastMoment = expireAt.plusSeconds(10)
         if (runAt.isAfter(lastMoment)) {
             log.info("POLL: parando (além do TTL) txid={}", txid); return
