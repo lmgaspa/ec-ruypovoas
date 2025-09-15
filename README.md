@@ -1,8 +1,8 @@
-📚 Ecommerce AG Books - Fullstack
+📚 Ecommerce Editora Nosso Lar Books - Fullstack
 
 This is the fullstack service for the AG Books online store. It handles:
 
-PIX (brazilian digital payment), payment creation (QR Code) with using Efí Bank Integration API
+PIX (brazilian digital payment), payment creation (QR Code) and credit card with using Efí Bank Integration API
 
 Webhook, with email sending, as soon as payment is made, sending an email to the customer and the seller, containing purchase data and other attributes for sending books, such as name, address, email, WhatsApp, books purchased.
 

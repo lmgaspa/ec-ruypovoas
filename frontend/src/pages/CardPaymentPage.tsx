@@ -5,12 +5,20 @@ import { formatPrice } from "../utils/formatPrice";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "https://seu-backend.herokuapp.com";
 
+interface CardData {
+  number: string;
+  holderName: string;
+  expirationMonth: string;
+  expirationYear: string;
+  cvv: string;
+}
+
 export default function CardPaymentPage() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const [card, setCard] = useState({
+  const [card, setCard] = useState<CardData>({
     number: "",
     holderName: "",
     expirationMonth: "",
@@ -38,16 +46,22 @@ export default function CardPaymentPage() {
           shipping: form.shipping ?? 0,
         }),
       });
+
       if (!res.ok) throw new Error(await res.text());
-      const data = await res.json();
-      if (data.message?.includes("Pagamento")) {
-        localStorage.removeItem("cart");
-        navigate(`/pedido-confirmado?orderId=${data.orderId}`);
+      const data: { message?: string; orderId?: string; paid?: boolean } = await res.json();
+
+      localStorage.removeItem("cart");
+
+      // 🔑 Redireciona para PedidoConfirmado.tsx com payment=card
+      navigate(
+        `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${data.paid ? "true" : "false"}`
+      );
+    } catch (e: unknown) {
+      if (e instanceof Error) {
+        setErrorMsg(e.message);
       } else {
-        setErrorMsg("Erro no pagamento com cartão.");
+        setErrorMsg("Erro inesperado no pagamento.");
       }
-    } catch (e: any) {
-      setErrorMsg(e.message);
     } finally {
       setLoading(false);
     }
@@ -58,20 +72,48 @@ export default function CardPaymentPage() {
       <h2 className="text-xl font-semibold mb-4">Pagamento com Cartão</h2>
       {errorMsg && <div className="bg-red-50 text-red-600 p-2 mb-4">{errorMsg}</div>}
 
-      <input value={card.number} onChange={(e) => setCard({ ...card, number: e.target.value })} placeholder="Número do cartão" className="border p-2 w-full mb-2" />
-      <input value={card.holderName} onChange={(e) => setCard({ ...card, holderName: e.target.value })} placeholder="Nome impresso" className="border p-2 w-full mb-2" />
+      <input
+        value={card.number}
+        onChange={(e) => setCard({ ...card, number: e.target.value })}
+        placeholder="Número do cartão"
+        className="border p-2 w-full mb-2"
+      />
+      <input
+        value={card.holderName}
+        onChange={(e) => setCard({ ...card, holderName: e.target.value })}
+        placeholder="Nome impresso"
+        className="border p-2 w-full mb-2"
+      />
       <div className="flex gap-2">
-        <input value={card.expirationMonth} onChange={(e) => setCard({ ...card, expirationMonth: e.target.value })} placeholder="MM" className="border p-2 w-1/2 mb-2" />
-        <input value={card.expirationYear} onChange={(e) => setCard({ ...card, expirationYear: e.target.value })} placeholder="AA" className="border p-2 w-1/2 mb-2" />
+        <input
+          value={card.expirationMonth}
+          onChange={(e) => setCard({ ...card, expirationMonth: e.target.value })}
+          placeholder="MM"
+          className="border p-2 w-1/2 mb-2"
+        />
+        <input
+          value={card.expirationYear}
+          onChange={(e) => setCard({ ...card, expirationYear: e.target.value })}
+          placeholder="AA"
+          className="border p-2 w-1/2 mb-2"
+        />
       </div>
-      <input value={card.cvv} onChange={(e) => setCard({ ...card, cvv: e.target.value })} placeholder="CVV" className="border p-2 w-full mb-4" />
+      <input
+        value={card.cvv}
+        onChange={(e) => setCard({ ...card, cvv: e.target.value })}
+        placeholder="CVV"
+        className="border p-2 w-full mb-4"
+      />
 
       <p className="font-bold mb-4">Total: {formatPrice(total)}</p>
 
-      <button disabled={loading} onClick={handlePay} className="bg-blue-600 text-white py-2 w-full rounded hover:bg-blue-500">
+      <button
+        disabled={loading}
+        onClick={handlePay}
+        className="bg-blue-600 text-white py-2 w-full rounded hover:bg-blue-500"
+      >
         {loading ? "Processando..." : "Pagar com Cartão"}
       </button>
     </div>
   );
 }
-        

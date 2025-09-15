@@ -12,7 +12,7 @@ interface CheckoutFormProps {
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
   handleChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => void;
   onNavigateBack: () => void;
 }
@@ -76,10 +76,30 @@ const CheckoutForm = (props: CheckoutFormProps) => {
     });
   };
 
+  const handleCardCheckout = () => {
+    if (!props.cartItems.length) {
+      alert("Seu carrinho está vazio.");
+      return;
+    }
+
+    // Validações mínimas antes de ir para a página de cartão
+    if (!props.form.firstName || !props.form.lastName || !props.form.email) {
+      alert("Preencha os dados principais antes de continuar com cartão.");
+      return;
+    }
+
+    // Salva no localStorage para a próxima tela
+    localStorage.setItem("checkoutForm", JSON.stringify(props.form));
+    localStorage.setItem("cart", JSON.stringify(props.cartItems));
+
+    navigate("/pagamento-cartao");
+  };
+
   return (
     <CheckoutFormView
       {...props}
       handlePixCheckout={handlePixCheckout}
+      handleCardCheckout={handleCardCheckout}
     />
   );
 };
