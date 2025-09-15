@@ -18,10 +18,10 @@ function SupportPage() {
         <p>
           <strong>Email:</strong>{' '}
           <a 
-            href="mailto:ag1957@gmail.com" 
+            href="mailto:luhmgasparetto@gmail.com" 
             className="text-primary hover:underline"
           >
-            ag1957@gmail.com
+            luhmgasparetto@gmail.com
           </a>
         </p>
       </div>
