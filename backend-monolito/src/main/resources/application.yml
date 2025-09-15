@@ -71,7 +71,7 @@ efi:
     client_id: ${EFI_CLIENT_ID}
     client_secret: ${EFI_CLIENT_SECRET}
     chave: ${EFI_PIX_KEY}
-    cert-path: classpath:producao-811858-agenorgasparettoec.p12
+    cert-path: classpath:producao-811858-editoranossolar.p12
     cert-password: ""
     sandbox: false
 

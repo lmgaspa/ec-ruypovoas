@@ -5,7 +5,6 @@ import org.springframework.beans.factory.annotation.Value
 import org.springframework.mail.javamail.JavaMailSender
 import org.springframework.mail.javamail.MimeMessageHelper
 import org.springframework.stereotype.Service
-import jakarta.mail.internet.MimeMessage
 
 @Service
 class EmailService(
@@ -15,31 +14,62 @@ class EmailService(
 ) {
     private val log = org.slf4j.LoggerFactory.getLogger(EmailService::class.java)
 
+    // ==================== PIX OU CARTÃO PAGO ====================
+
     fun sendClientEmail(order: Order) {
-        val msg = mailSender.createMimeMessage()
-        val h = MimeMessageHelper(msg, true, "UTF-8")
-        val from = System.getenv("MAIL_USERNAME") ?: authorEmail
-        h.setFrom(from)
-        h.setTo(order.email)
-        h.setSubject("Agenor Gasparetto – Ecommerce | Pagamento confirmado (#${order.id})")
-        h.setText(buildHtmlMessage(order, isAuthor = false), true)
-        try { mailSender.send(msg); log.info("MAIL cliente OK -> {}", order.email) }
-        catch (e: Exception) { log.error("MAIL cliente ERRO: {}", e.message, e) }
+        sendEmail(
+            to = order.email,
+            subject = "Editora Nosso Lar – Ecommerce | Pagamento confirmado (#${order.id})",
+            html = buildHtmlMessage(order, isAuthor = false, declined = false)
+        )
     }
 
     fun sendAuthorEmail(order: Order) {
+        sendEmail(
+            to = authorEmail,
+            subject = "Novo pedido pago (#${order.id}) – Editora Nosso Lar",
+            html = buildHtmlMessage(order, isAuthor = true, declined = false)
+        )
+    }
+
+    // ==================== CARTÃO RECUSADO ====================
+
+    fun sendClientCardDeclined(order: Order) {
+        sendEmail(
+            to = order.email,
+            subject = "Editora Nosso Lar – Ecommerce | Pagamento não aprovado (#${order.id})",
+            html = buildHtmlMessage(order, isAuthor = false, declined = true)
+        )
+    }
+
+    fun sendAuthorCardDeclined(order: Order) {
+        sendEmail(
+            to = authorEmail,
+            subject = "Pedido recusado (#${order.id}) – Editora Nosso Lar",
+            html = buildHtmlMessage(order, isAuthor = true, declined = true)
+        )
+    }
+
+    // ==================== CORE ====================
+
+    private fun sendEmail(to: String, subject: String, html: String) {
         val msg = mailSender.createMimeMessage()
         val h = MimeMessageHelper(msg, true, "UTF-8")
         val from = System.getenv("MAIL_USERNAME") ?: authorEmail
         h.setFrom(from)
-        h.setTo(authorEmail)
-        h.setSubject("Novo pedido pago (#${order.id}) – Agenor Gasparetto")
-        h.setText(buildHtmlMessage(order, isAuthor = true), true)
-        try { mailSender.send(msg); log.info("MAIL autor OK -> {}", authorEmail) }
-        catch (e: Exception) { log.error("MAIL autor ERRO: {}", e.message, e) }
+        h.setTo(to)
+        h.setSubject(subject)
+        h.setText(html, true)
+
+        try {
+            mailSender.send(msg)
+            log.info("MAIL enviado OK -> $to")
+        } catch (e: Exception) {
+            log.error("MAIL ERRO para $to: {}", e.message, e)
+        }
     }
 
-    private fun buildHtmlMessage(order: Order, isAuthor: Boolean): String {
+    private fun buildHtmlMessage(order: Order, isAuthor: Boolean, declined: Boolean): String {
         val total = "R$ %.2f".format(order.total.toDouble())
         val shipping = if (order.shipping > java.math.BigDecimal.ZERO)
             "R$ %.2f".format(order.shipping.toDouble()) else "Grátis"
@@ -83,30 +113,64 @@ class EmailService(
             """.trimIndent()
         } ?: ""
 
-        val headerClient = """
-            <p style="margin:0 0 12px">Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
-            <p style="margin:0 0 16px">Recebemos o seu pagamento via Pix. Seu pedido foi confirmado 🎉</p>
-            <p style="margin:0 0 4px">Endereço de recebimento: $addressLine</p>
-            $noteBlock
-        """.trimIndent()
+        val paymentMethod = when (order.paymentMethod?.lowercase()) {
+            "pix" -> "Pix"
+            "card" -> "Cartão de Crédito"
+            else -> "Pagamento"
+        }
 
-        val headerAuthor = """
-            <p style="margin:0 0 12px"><strong>Novo pedido pago</strong> no site.</p>
-            <p style="margin:0 0 4px">Cliente: ${order.firstName} ${order.lastName}</p>
-            <p style="margin:0 0 4px">Email: ${order.email}</p>
-            <p style="margin:0 0 4px">WhatsApp: <a href="$waHref">$maskedPhone</a></p>
-            <p style="margin:0 0 4px">Endereço: $addressLine</p>
+        // ==================== MENSAGENS ====================
+
+        val headerClient = if (declined) {
+            """
+            <p>Olá, <strong>${order.firstName} ${order.lastName}</strong>.</p>
+            <p>Infelizmente seu pagamento via <strong>$paymentMethod</strong> não foi aprovado ❌</p>
+            <p>Você pode tentar novamente com outro cartão ou escolher Pix.</p>
+            <p>Endereço de recebimento: $addressLine</p>
             $noteBlock
-        """.trimIndent()
+            """.trimIndent()
+        } else {
+            """
+            <p>Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
+            <p>Recebemos o seu pagamento via <strong>$paymentMethod</strong>. Seu pedido foi confirmado 🎉</p>
+            <p>Endereço de recebimento: $addressLine</p>
+            $noteBlock
+            """.trimIndent()
+        }
+
+        val headerAuthor = if (declined) {
+            """
+            <p><strong>Pedido recusado</strong> no site.</p>
+            <p>Cliente: ${order.firstName} ${order.lastName}</p>
+            <p>Email: ${order.email}</p>
+            <p>WhatsApp: <a href="$waHref">$maskedPhone</a></p>
+            <p>Endereço: $addressLine</p>
+            <p><strong>Pagamento:</strong> $paymentMethod (recusado)</p>
+            $noteBlock
+            """.trimIndent()
+        } else {
+            """
+            <p><strong>Novo pedido pago</strong> no site.</p>
+            <p>Cliente: ${order.firstName} ${order.lastName}</p>
+            <p>Email: ${order.email}</p>
+            <p>WhatsApp: <a href="$waHref">$maskedPhone</a></p>
+            <p>Endereço: $addressLine</p>
+            <p><strong>Pagamento:</strong> $paymentMethod</p>
+            $noteBlock
+            """.trimIndent()
+        }
 
         val who = if (isAuthor) headerAuthor else headerClient
-        val txidLine = order.txid?.let { "<p style=\"margin:0 0 8px\"><strong>TXID Pix:</strong> $it</p>" } ?: ""
 
-        // bloco de contato só para cliente
+        val txidLine =
+            if (!declined && order.paymentMethod.equals("pix", ignoreCase = true))
+                order.txid?.let { "<p><strong>TXID Pix:</strong> $it</p>" }
+            else null
+
         val contactBlock = if (!isAuthor) """
             <p style="margin:16px 0 0;color:#555">
-              Em caso de cancelamento ou dúvida, entre em contato com <strong>Agenor Gasparetto</strong><br>
-              Email: <a href="mailto:ag1957@gmail.com">ag1957@gmail.com</a> · WhatsApp: <a href="https://wa.me/5571991974445">(71) 99197-4445</a>
+              Em caso de dúvida, entre em contato com <strong>Editora Nosso Lar</strong><br>
+              Email: <a href="mailto:luhmgasparetto@gmail.com">luhmgasparetto@gmail.com</a> · WhatsApp: <a href="https://wa.me/5571994105740">(71) 99410-5740</a>
             </p>
         """.trimIndent() else ""
 
@@ -115,31 +179,29 @@ class EmailService(
         <body style="font-family:Arial,Helvetica,sans-serif;background:#f6f7f9;padding:24px">
           <div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden">
             <div style="background:#111;color:#fff;padding:16px 20px">
-              <strong style="font-size:16px">Agenor Gasparetto – Ecommerce</strong>
+              <strong style="font-size:16px">Editora Nosso Lar – Ecommerce</strong>
             </div>
             <div style="padding:20px">
               $who
 
-              <p style="margin:12px 0 8px"><strong>Nº do pedido:</strong> #${order.id}</p>
-              $txidLine
+              <p><strong>Nº do pedido:</strong> #${order.id}</p>
+              ${txidLine ?: ""}
 
+              ${if (!declined) """
               <h3 style="font-size:15px;margin:16px 0 8px">Itens</h3>
-              <table width="100%" cellspacing="0" cellpadding="0" style="border-collapse:collapse">
-                $itemsHtml
-              </table>
+              <table width="100%">$itemsHtml</table>
 
-              <div style="margin-top:14px">
-                <p style="margin:4px 0"><strong>Frete:</strong> $shipping</p>
-                <p style="margin:4px 0;font-size:16px"><strong>Total:</strong> $total</p>
-                <p style="margin:4px 0"><strong>Pagamento:</strong> Pix</p>
-              </div>
+              <p><strong>Frete:</strong> $shipping<br>
+                 <strong>Total:</strong> $total<br>
+                 <strong>Pagamento:</strong> $paymentMethod</p>
+              """ else ""}
 
-              ${if (!isAuthor) "<p style=\"margin:16px 0 0\">Obrigado por comprar com a gente! 💛</p>" else ""}
+              ${if (!isAuthor) "<p>${if (declined) "Tente novamente 💳 ou escolha Pix" else "Obrigado por comprar com a gente! 💛"}</p>" else ""}
 
               $contactBlock
             </div>
             <div style="background:#fafafa;color:#888;padding:12px 20px;text-align:center;font-size:12px">
-              © ${java.time.Year.now()} Agenor Gasparetto. Todos os direitos reservados.
+              © ${java.time.Year.now()} Editora Nosso Lar. Todos os direitos reservados.
             </div>
           </div>
         </body>
@@ -167,4 +229,3 @@ class EmailService(
     private fun escapeHtml(s: String): String =
         s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 }
-

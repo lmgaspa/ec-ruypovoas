@@ -1,5 +1,6 @@
 package com.luizgasparetto.backend.monolito.dto
 
+// Requisição de checkout (vinda do frontend)
 data class CheckoutRequest(
     val firstName: String,
     val lastName: String,
@@ -15,12 +16,17 @@ data class CheckoutRequest(
     val phone: String,
     val email: String,
     val note: String?,
-    val payment: String?,
+    val payment: String,
     val shipping: Double,
     val cartItems: List<CartItemDto>,
-    val total: Double
+    val total: Double,
+
+    // ✅ usado apenas quando for cartão
+    val cardToken: String? = null,   // token seguro gerado pelo frontend
+    val installments: Int? = 1       // número de parcelas
 )
 
+// Itens do carrinho
 data class CartItemDto(
     val id: String,
     val title: String,
@@ -28,4 +34,3 @@ data class CartItemDto(
     val quantity: Int,
     val imageUrl: String
 )
-

@@ -10,7 +10,7 @@ function SupportPage() {
       <div className="mt-12 text-center text-lg leading-relaxed">
         <p>
           Em caso de dúvida sobre os livros, pagamento, ou status do pedido,
-          entrar em contato com <strong>Agenor Gasparetto</strong>.
+          entrar em contato com <strong>Editora Nosso Lar</strong>.
         </p>
         <p className="mt-6">
           <strong>WhatsApp:</strong> (71) 9197-4445

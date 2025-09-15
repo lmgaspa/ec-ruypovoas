@@ -12,6 +12,10 @@ data class WebhookEvent(
     @Column(length = 40)
     var txid: String? = null,
 
+    // 🔹 Novo campo para cartão // ALTERADO
+    @Column(length = 40)
+    var chargeId: String? = null, // ALTERADO
+
     @Column(length = 40)
     var status: String? = null,
 

@@ -22,14 +22,15 @@ interface CheckoutFormViewProps {
     email: string;
     note: string;
     delivery: string;
-    payment: string;
+    payment: string; // agora vamos usar
   };
   handleChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => void;
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
   handlePixCheckout: () => void;
+  handleCardCheckout: () => void; // novo
   onNavigateBack: () => void;
 }
 
@@ -42,10 +43,12 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   updateQuantity,
   removeItem,
   handlePixCheckout,
+  handleCardCheckout,
   onNavigateBack,
 }) => (
   <div className="max-w-5xl mx-auto py-12 px-4">
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-6">
+      {/* FORMULÁRIO */}
       <div className="lg:col-span-2 space-y-6">
         <div className="mb-4">
           <button
@@ -87,6 +90,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         </div>
       </div>
 
+      {/* RESUMO DO PEDIDO */}
       <div>
         <h2 className="text-lg font-bold">SEU PEDIDO</h2>
 
@@ -122,17 +126,41 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           <span>{formatPrice(total)}</span>
         </div>
 
-        <p className="text-xs text-center text-red-600 mt-4">
-          Aceitamos apenas Pix como forma de pagamento.
-        </p>
+        {/* ESCOLHA DO PAGAMENTO */}
+        <div className="mt-6">
+          <h3 className="text-md font-semibold mb-2">Forma de pagamento</h3>
+          <select
+            name="payment"
+            value={form.payment}
+            onChange={handleChange}
+            className="border w-full p-2 rounded"
+          >
+            <option value="">Selecione...</option>
+            <option value="pix">Pix</option>
+            <option value="card">Cartão de crédito</option>
+          </select>
+        </div>
 
-        <button
-          onClick={handlePixCheckout}
-          type="button"
-          className="bg-red-600 text-white py-2 w-full mt-4 rounded hover:bg-red-500 transition"
-        >
-          Finalizar Pagamento por Pix
-        </button>
+        {/* BOTÃO DE PAGAMENTO */}
+        {form.payment === "pix" && (
+          <button
+            onClick={handlePixCheckout}
+            type="button"
+            className="bg-green-600 text-white py-2 w-full mt-4 rounded hover:bg-green-500 transition"
+          >
+            Finalizar Pagamento por Pix
+          </button>
+        )}
+
+        {form.payment === "card" && (
+          <button
+            onClick={handleCardCheckout}
+            type="button"
+            className="bg-blue-600 text-white py-2 w-full mt-4 rounded hover:bg-blue-500 transition"
+          >
+            Finalizar Pagamento com Cartão
+          </button>
+        )}
       </div>
     </div>
   </div>

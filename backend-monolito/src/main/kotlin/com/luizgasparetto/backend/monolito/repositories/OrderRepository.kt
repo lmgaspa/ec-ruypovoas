@@ -15,8 +15,13 @@ interface OrderRepository : JpaRepository<Order, Long> {
     @EntityGraph(attributePaths = ["items"])
     fun findWithItemsByTxid(txid: String): Order?
 
+    // 🔹 Novo método para buscar pedidos por chargeId (cartão) // ALTERADO
     @EntityGraph(attributePaths = ["items"])
-    @Query("""
+    fun findWithItemsByChargeId(chargeId: String): Order? // ALTERADO
+
+    @EntityGraph(attributePaths = ["items"])
+    @Query(
+        """
         select distinct o
           from Order o
           left join o.items it
@@ -24,7 +29,8 @@ interface OrderRepository : JpaRepository<Order, Long> {
            and o.status = :status
            and o.reserveExpiresAt is not null
            and o.reserveExpiresAt < :now
-    """)
+    """
+    )
     fun findExpiredReservations(
         @Param("now") now: OffsetDateTime,
         @Param("status") status: OrderStatus

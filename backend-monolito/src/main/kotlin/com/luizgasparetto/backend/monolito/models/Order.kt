@@ -7,9 +7,7 @@ import java.time.OffsetDateTime
 @Entity
 @Table(
     name = "orders",
-    indexes = [
-        Index(name = "uk_orders_txid", columnList = "txid", unique = true)
-    ]
+    indexes = [Index(name = "uk_orders_txid", columnList = "txid", unique = true)]
 )
 data class Order(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -49,9 +47,15 @@ data class Order(
     var qrCodeBase64: String? = null,
 
     @Column(nullable = false, unique = true, length = 35)
-    var txid: String, // <-- não-nulo (já vem do Checkout)
+    var txid: String,
 
-    // ---- novos campos para reserva/pagamento ----
+    @Column(name = "charge_id", unique = true)
+    var chargeId: String? = null,
+
+    // 🔹 Agora nullable para não quebrar pedidos antigos
+    @Column(length = 16)
+    var paymentMethod: String? = null, // "pix" | "card" | null = legado
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
     var status: OrderStatus = OrderStatus.CRIADO,

@@ -1,60 +1,34 @@
 export const descriptions = {
-  extase: `
-    A presente coletânea reúne crônicas de dois períodos.<br>
-    As primeiras quatro, inéditas, são de outubro e novembro de 2022;<br>
-    as seguintes quatro do período entre 2000 e 2001; e a última, como publicar um livro?, do ano de 2018.<br><br>
+  sonhos: `
+    A Vida é sábia e justa e, se nos deu a capacidade de desejar,
+    querer e sonhar, também nos deu o poder de realizar.
+    Mas, para isso, precisamos acreditar em nosso próprio potencial,
+    sairmos da inércia e confiarmos nas forças do invisível.<br><br>
+    
+    Se fizermos isso todos os nossos sonhos se tornarão possíveis e nossa vida muito
+    mais bela e plena.<br><br>
 
-    As primeiras têm como ambiência Itabuna e o seu Rio Cachoeira.<br>
-    As últimas, o Sudeste da Bahia, a região do cacau da Bahia e da sua exuberante Mata Atlântica.<br><br>
+    Este romance traz em suas páginas o poder de nos reacender a esperança,
+    impulsionando-nos para a frente, tirando-nos o medo de viver e plantando em nossos
+    corações a vontade imensa de ser feliz e colaborar através do bem, na construção de
+    um mundo melhor.<br><br>
 
-    Êxtase capta o encantamento de um senhor idoso com seus passarinhos. Emoção em estado puro.<br><br>
+    Acompanhando a belíssima história de Ricardo em busca de uma vida melhor,
+    perceberemos que, quanto mais nos unirmos à espiritualidade e vivermos dentro da
+    ética e da moral cósmica, mais rápida será nossa evolução e a realização das nossas
+    aspirações serão apenas consequência.<br><br>
 
-    Cachoeira, o rio de minha aldeia é uma homenagem à cidade de Itabuna e ao rio que a corta, como muitos rios cortam outras cidades mundo afora,<br>
-    mas destacando uma singularidade que se repete em cada entardecer.<br>
-    Estabelece um diálogo com Fernando Pessoa e o rio de sua aldeia.<br><br>
+    Esta obra resgata os verdadeiros valores do Espiritismo em suas dimensões mais profundas,
+    trazendo ainda temas como:
+    mediunidade e obsessão, inimigos de vidas passadas, regressão
+    de memória, o poder invencível da fé, a força soberana da prece e nos mostra,
+    como poucos livros até então, a grande vantagem
+    de confiarmos em Deus e em sua soberana justiça.<br><br>
 
-    Do culpado e dos tempos de antigamente foca a Internet e seu incomparável e incomensurável potencial construtivo e também destrutivo,
-    bem como o saudosismo do passado idealizado e a saudade da condição de criança diante de uma pitangueira carregada de frutinhas encarnadas.<br><br>
-
-    Como publicar um livro? explora as dificuldades enfrentadas por escritores e editores independentes,<br>
-    especialmente no contexto do interior da Bahia, onde o mercado editorial é ainda mais desafiador.
+    Jamais desista daquilo que seu coração deseja, pois nenhum sonho é impossível
+    quando nos entregamos à vida com confiança e coragem.
   `,
-  regressantes: `
-    Sobre o fenômeno de consumir a vida na grande cidade e, na velhice, retornar, silencioso e anônimo, para próximo do lugar de nascimento.<br>
-    A literatura dá conta de que muitos, em diferentes conjunturas de crise, migraram para regiões economicamente mais promissoras.<br>
-    A propósito, o próprio Sul da Bahia, um dia, constituiu-se em um eldorado para sucessivas levas de sergipanos e de sertanejos do Norte da Bahia.<br><br>
-
-    O fenômeno da migração para fora da região ocorreu, principalmente, nos períodos de grandes adversidades.<br>
-    Para a maior parte dos que labutavam na lavoura de cacau, quer como trabalhadores, quer como pequenos proprietários,<br>
-    a migração, nos tempos difíceis – e esses não foram poucos – é um fato corriqueiro.<br><br>
-
-    Portanto, o novo não é a migração, mas o retorno. Logo, o dado que se pretendeu focar em Regressantes não é propriamente o migrar,<br>
-    mas o retornar à terra natal em condições não tão favoráveis, já na velhice.<br><br>
-
-    Regressantes é, no fundo e em primeiro plano, uma homenagem a esses, ainda que fortes, perdedores,<br>
-    ao menos, na perspectiva de sua afirmação econômica e material.
+  julian: `
+    Uma história linda onde o pequeno Julian vivencia muitos ensinamentos espirituais depois de descarnar.
   `,
-  sempre: `
-    A relação entre avós e netos tende a ser boa. Netos surpreendem.<br>
-    Filhos também surpreendem, mas os pais andam, quase sempre, muito ocupados em ganhar a vida para perceberem.<br>
-    Os avós têm mais tempo e podem ver mais e ver melhor.<br><br>
-
-    As histórias de “Para sempre felizes!” contam episódios reais, vivenciados com meu neto.<br>
-    São episódios que, com variantes, muitos avós vivenciaram e vivenciam.<br>
-    Os pais, em sua pressa, quase sempre passam batidos.<br>
-    E, quando notam, anos já se passaram e os filhos já cresceram.
-  `,
-  versos: `
-  O livro reúne dois conjuntos de poesias.  O primeiro, Versos Desnudos e o segundo,Poemas em Tempos Tensos.<br><br>
-  O primeiro consiste em poemas sintéticos, sem adjetivações, franciscanos, minimalistas, em que o sentido e a estética emergem a partir de um sequenciamento de vocábulos.<br><br>
-  Esses versos, resumidos como desnudos, apresentam dois formatos:<br><br>
-  Em um formato estão poemas com dois blocos de sete versos cada e, um segundo formato, composto por cinco poemas com cinco blocos de 18 versos cada.<br><br>
-  E, no final, cinco poemas convencionais, Poemas em Tempos Tensos, que têm na tensão geopolítica do presente e na insensatez da Humanidade seu foco principal.
-  `,
-  versi: `
-  Il libro riunisce due raccolte di poesie. La prima, “Versi Spogli”, e la seconda, “Poems in Tempi Difficili”.<br><br>
-  La prima raccolta è composta da poesie sintetiche, prive di aggettivi, minimaliste, in cui significato ed estetica emergono da una sequenza di parole.<br><br>
-  Questi versi, riassunti come “spogli”, sono disponibili in due formati: un formato presenta poesie con due blocchi di sette versi ciascuno e un secondo formato è composto da cinque poesie con cinque blocchi di 18 versi ciascuno.<br><br>
-  E, infine, cinque poesie convenzionali, “Poesie in Tempi Difficili”, il cui obiettivo principale è la tensione geopolitica del presente e la follia dell’umanità.
-  `
 };
