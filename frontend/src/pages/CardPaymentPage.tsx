@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { CartItem } from "../context/CartTypes";
 import { formatPrice } from "../utils/formatPrice";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "https://seu-backend.herokuapp.com";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
 
 interface CardData {
   number: string;

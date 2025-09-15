@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import CheckoutFormView from "../components/checkout/CheckoutFormView";
 import type { CartItem } from "../context/CartTypes";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "https://seu-backend.herokuapp.com";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
