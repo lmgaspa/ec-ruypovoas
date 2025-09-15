@@ -13,7 +13,6 @@ export interface Book {
   stock: number;
 }
 
-const editoraNossoLar = "Editora Nosso Lar";
 const selo = "Editora Nosso Lar";
 const idioma = "Português";
 
