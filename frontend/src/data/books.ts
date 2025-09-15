@@ -24,7 +24,7 @@ export const books: Book[] = [
     imageUrl: "/images/sonhos.webp",
     price: "R$30,00",
     description: descriptions.sonhos,
-    author: editoraNossoLar,
+    author: "Antônio Reinaldo Carneiro de Oliveira",
     additionalInfo: {
       Peso: "285 g",
       Dimensões: "16 × 23 × 2,3 cm",
