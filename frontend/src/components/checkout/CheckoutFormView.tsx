@@ -1,29 +1,33 @@
 import React from "react";
 import { formatPrice } from "../../utils/formatPrice";
+import { formatCpf, formatCep } from "../../utils/masks";
 import type { CartItem } from "../../context/CartTypes";
+
+/** Shape do formulário (separado para tipar REQUIRED_FIELDS fora do componente) */
+interface CheckoutFormData {
+  firstName: string;
+  lastName: string;
+  cpf: string;
+  country: string;
+  cep: string;
+  address: string;
+  number: string;
+  complement: string; // opcional
+  district: string;
+  city: string;
+  state: string;
+  phone: string;
+  email: string;
+  note: string; // opcional
+  delivery: string;
+  payment: string;
+}
 
 interface CheckoutFormViewProps {
   cartItems: CartItem[];
   total: number;
   shipping: number;
-  form: {
-    firstName: string;
-    lastName: string;
-    cpf: string;
-    country: string;
-    cep: string;
-    address: string;
-    number: string;
-    complement: string; // opcional
-    district: string;
-    city: string;
-    state: string;
-    phone: string;
-    email: string;
-    note: string; // opcional
-    delivery: string;
-    payment: string;
-  };
+  form: CheckoutFormData;
   handleChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => void;
@@ -32,6 +36,59 @@ interface CheckoutFormViewProps {
   handlePixCheckout: () => void;
   handleCardCheckout: () => void;
   onNavigateBack: () => void;
+}
+
+/** Campos obrigatórios (fora do componente para satisfazer react-hooks/exhaustive-deps) */
+const REQUIRED_FIELDS: (keyof CheckoutFormData)[] = [
+  "firstName",
+  "lastName",
+  "cpf",
+  "cep",
+  "address",
+  "number",
+  "district",
+  "city",
+  "state",
+  "phone",
+  "email",
+  "payment",
+];
+
+const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/; // 000.000.000-00
+const CEP_REGEX = /^\d{5}-\d{3}$/;               // 00000-000
+const PHONE_REGEX = /^\(\d{2}\)9\d{4}-\d{4}$/;   // (DD)90000-0000  (9 obrigatório)
+
+/** Validação algorítmica de CPF (com dígitos verificadores) */
+function isValidCpf(cpfMasked: string): boolean {
+  const cpf = cpfMasked.replace(/\D/g, "");
+  if (cpf.length !== 11) return false;
+  if (/^(\d)\1{10}$/.test(cpf)) return false; // rejeita todos dígitos iguais
+
+  const calcDV = (base: string, factorStart: number) => {
+    let sum = 0;
+    for (let i = 0; i < base.length; i++) {
+      sum += Number(base[i]) * (factorStart - i);
+    }
+    const dv = (sum * 10) % 11;
+    return dv === 10 ? 0 : dv;
+  };
+
+  const dv1 = calcDV(cpf.slice(0, 9), 10);
+  if (dv1 !== Number(cpf[9])) return false;
+
+  const dv2 = calcDV(cpf.slice(0, 10), 11);
+  return dv2 === Number(cpf[10]);
+}
+
+/** Máscara estrita para telefone no formato (DD)90000-0000 */
+function formatPhoneStrict(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 11); // 2 DDD + 9 números
+  const ddd = digits.slice(0, 2);
+  const rest = digits.slice(2); // até 9 dígitos
+
+  if (digits.length <= 2) return `(${ddd}`;
+  if (rest.length <= 5) return `(${ddd})${rest}`;               // (71)9, (71)9000, (71)90000
+  return `(${ddd})${rest.slice(0, 5)}-${rest.slice(5, 9)}`;     // (71)90000-0000
 }
 
 const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
@@ -46,33 +103,46 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   handleCardCheckout,
   onNavigateBack,
 }) => {
-  // Liste explicitamente os obrigatórios (exceto 'note' e 'complement').
-  // Não considerei 'country' (já vem "Brasil") nem 'delivery' (não tem input nesta tela).
-  const requiredFields: (keyof CheckoutFormViewProps["form"])[] = [
-    "firstName",
-    "lastName",
-    "cpf",
-    "cep",
-    "address",
-    "number",
-    "district",
-    "city",
-    "state",
-    "phone",
-    "email",
-    "payment",
-  ];
+  // Aplica máscaras antes de delegar ao handleChange do pai (sem usar "any")
+  const handleMaskedChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    const { name, value } = target;
+    let v = value;
+
+    if (name === "cpf") v = formatCpf(value);            // 000.000.000-00
+    else if (name === "cep") v = formatCep(value);       // 00000-000
+    else if (name === "phone") v = formatPhoneStrict(value); // (DD)90000-0000
+
+    if (v !== value) {
+      // atualiza o valor do elemento antes de propagar para o handler do pai
+      (target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value = v;
+    }
+    handleChange(e);
+  };
 
   const missingFields = React.useMemo(
-    () =>
-      requiredFields.filter(
-        (f) => String(form[f] ?? "").trim().length === 0
-      ),
+    () => REQUIRED_FIELDS.filter((f) => String(form[f] ?? "").trim().length === 0),
     [form]
   );
 
-  // Também bloqueia caso o carrinho esteja vazio.
-  const isFormValid = missingFields.length === 0 && cartItems.length > 0;
+  const cpfFormatOk = CPF_REGEX.test(form.cpf);
+  const cpfDvOk = cpfFormatOk && isValidCpf(form.cpf);
+  const cepOk = CEP_REGEX.test(form.cep);
+  const phoneOk = PHONE_REGEX.test(form.phone);
+
+  // Só libera se: sem faltantes, carrinho > 0, CPF (formato + DV) ok, CEP ok e Phone ok.
+  const isFormValid =
+    missingFields.length === 0 &&
+    cartItems.length > 0 &&
+    cpfDvOk &&
+    cepOk &&
+    phoneOk;
+
+  const cpfInvalid = form.cpf !== "" && !cpfDvOk;
+  const cepInvalid = form.cep !== "" && !cepOk;
+  const phoneInvalid = form.phone !== "" && !phoneOk;
 
   return (
     <div className="max-w-5xl mx-auto py-12 px-4">
@@ -92,19 +162,130 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           <h2 className="text-lg font-bold">DADOS DE COBRANÇA E ENTREGA</h2>
 
           <div className="grid grid-cols-2 gap-4">
-            <input name="firstName" value={form.firstName} onChange={handleChange} placeholder="Nome *" className="border p-2" />
-            <input name="lastName" value={form.lastName} onChange={handleChange} placeholder="Sobrenome *" className="border p-2" />
-            <input name="cpf" value={form.cpf} onChange={handleChange} placeholder="CPF *" className="border p-2 col-span-2" />
+            <input
+              name="firstName"
+              value={form.firstName}
+              onChange={handleChange}
+              placeholder="Nome *"
+              className="border p-2"
+              autoComplete="given-name"
+            />
+            <input
+              name="lastName"
+              value={form.lastName}
+              onChange={handleChange}
+              placeholder="Sobrenome *"
+              className="border p-2"
+              autoComplete="family-name"
+            />
+
+            <input
+              name="cpf"
+              value={form.cpf}
+              onChange={handleMaskedChange}
+              placeholder="CPF (000.000.000-00) *"
+              className={`border p-2 col-span-2 ${cpfInvalid ? "border-red-500" : ""}`}
+              inputMode="numeric"
+              aria-invalid={cpfInvalid}
+            />
+            {cpfInvalid && (
+              <p className="text-xs text-red-600 col-span-2">
+                CPF inválido. Use o formato 000.000.000-00 (ex.: 044.094.825-80).
+              </p>
+            )}
+
             <input value="Brasil" disabled className="border p-2 col-span-2" />
-            <input name="cep" value={form.cep} onChange={handleChange} placeholder="CEP (Ex: 00000-000) *" className="border p-2 col-span-2" />
-            <input name="address" value={form.address} onChange={handleChange} placeholder="Endereço *" className="border p-2 col-span-2" />
-            <input name="number" value={form.number} onChange={handleChange} placeholder="Número *" className="border p-2" />
-            <input name="complement" value={form.complement} onChange={handleChange} placeholder="Complemento (opcional)" className="border p-2" />
-            <input name="district" value={form.district} onChange={handleChange} placeholder="Bairro *" className="border p-2" />
-            <input name="city" value={form.city} onChange={handleChange} placeholder="Cidade *" className="border p-2" />
-            <input name="state" value={form.state} onChange={handleChange} placeholder="Estado *" className="border p-2" />
-            <input name="phone" value={form.phone} onChange={handleChange} placeholder="Celular *" className="border p-2 col-span-2" />
-            <input name="email" value={form.email} onChange={handleChange} placeholder="E-mail *" className="border p-2 col-span-2" />
+
+            <input
+              name="cep"
+              value={form.cep}
+              onChange={handleMaskedChange}
+              placeholder="CEP (00000-000) *"
+              className={`border p-2 col-span-2 ${cepInvalid ? "border-red-500" : ""}`}
+              inputMode="numeric"
+              aria-invalid={cepInvalid}
+              autoComplete="postal-code"
+            />
+            {cepInvalid && (
+              <p className="text-xs text-red-600 col-span-2">
+                CEP inválido. Use o formato 00000-000 (ex.: 45600-730).
+              </p>
+            )}
+
+            <input
+              name="address"
+              value={form.address}
+              onChange={handleChange}
+              placeholder="Endereço *"
+              className="border p-2 col-span-2"
+              autoComplete="address-line1"
+            />
+            <input
+              name="number"
+              value={form.number}
+              onChange={handleChange}
+              placeholder="Número *"
+              className="border p-2"
+              inputMode="numeric"
+              autoComplete="address-line2"
+            />
+            <input
+              name="complement"
+              value={form.complement}
+              onChange={handleChange}
+              placeholder="Complemento (opcional)"
+              className="border p-2"
+              autoComplete="address-line3"
+            />
+            <input
+              name="district"
+              value={form.district}
+              onChange={handleChange}
+              placeholder="Bairro *"
+              className="border p-2"
+            />
+            <input
+              name="city"
+              value={form.city}
+              onChange={handleChange}
+              placeholder="Cidade *"
+              className="border p-2"
+              autoComplete="address-level2"
+            />
+            <input
+              name="state"
+              value={form.state}
+              onChange={handleChange}
+              placeholder="Estado *"
+              className="border p-2"
+              autoComplete="address-level1"
+            />
+
+            <input
+              name="phone"
+              value={form.phone}
+              onChange={handleMaskedChange}
+              placeholder="Telefone (ex.: (71)90000-0000) *"
+              className={`border p-2 col-span-2 ${phoneInvalid ? "border-red-500" : ""}`}
+              inputMode="tel"
+              aria-invalid={phoneInvalid}
+              autoComplete="tel-national"
+            />
+            {phoneInvalid && (
+              <p className="text-xs text-red-600 col-span-2">
+                Telefone inválido. Use o formato (DD)90000-0000 (ex.: (71)90000-0000).
+              </p>
+            )}
+
+            <input
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="E-mail *"
+              className="border p-2 col-span-2"
+              type="email"
+              autoComplete="email"
+            />
           </div>
 
           <div>
@@ -171,7 +352,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
 
             {!isFormValid && (
               <p className="text-sm text-red-600 mt-2">
-                Preencha todos os campos obrigatórios para finalizar o pedido.
+                Preencha todos os campos obrigatórios. Formatos exigidos: CPF 000.000.000-00 (válido), CEP 00000-000, Telefone (DD)90000-0000.
               </p>
             )}
           </div>
