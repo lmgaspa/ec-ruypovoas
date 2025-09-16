@@ -1,5 +1,25 @@
 <!doctype html>
 <html lang="en">
+  <script type="text/javascript">
+  var s = document.createElement("script");
+  s.type = "text/javascript";
+  var v = parseInt(Math.random() * 1000000);
+  s.src =
+    "https://cobrancas.api.efipay.com.br/v1/cdn/cf1a4eb72fb74687e6a95a3da1bd027b/" + v; // Produção
+  s.async = false;
+  s.id = "cf1a4eb72fb74687e6a95a3da1bd027b";
+  if (!document.getElementById("cf1a4eb72fb74687e6a95a3da1bd027b")) {
+    document.getElementsByTagName("head")[0].appendChild(s);
+  }
+  window.$gn = {
+    validForm: true,
+    processed: false,
+    done: {},
+    ready: function (fn) {
+      window.$gn.done = fn;
+    },
+  };
+</script>
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" href="/favicon.ico" />

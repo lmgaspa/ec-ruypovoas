@@ -16,7 +16,8 @@ data class CheckoutRequest(
     val phone: String,
     val email: String,
     val note: String?,
-    val payment: String,
+    val payment: String, // "pix" | "card"
+    val paymentToken: String?, // 🔑 token gerado pela Efí
     val shipping: Double,
     val cartItems: List<CartItemDto>,
     val total: Double,

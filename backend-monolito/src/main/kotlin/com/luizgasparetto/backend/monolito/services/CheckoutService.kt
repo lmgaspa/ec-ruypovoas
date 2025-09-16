@@ -24,6 +24,7 @@
         private val orderRepository: OrderRepository,
         private val bookService: BookService,
         private val pixWatcher: PixWatcher,
+        private val cardWatcher: CardWatcher,
         private val emailService: EmailService,
         @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
         @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,
@@ -82,33 +83,29 @@
             val cardResult = try {
                 createCardCharge(totalAmount, request, txid)
             } catch (e: IllegalStateException) {
-                // ⚠️ Cartão recusado -> libera reserva + envia e-mails
                 releaseReservationTx(order.id!!)
                 runCatching {
                     emailService.sendClientCardDeclined(order)
                     emailService.sendAuthorCardDeclined(order)
-                }.onFailure { ex ->
-                    log.error("Falha ao enviar e-mails de recusa do cartão orderId={}", order.id, ex)
                 }
                 throw e
-            } catch (e: Exception) {
-                log.error("Falha ao criar cobrança cartão. orderId={}, txid={}", order.id, txid, e)
-                releaseReservationTx(order.id!!)
-                throw e
             }
-    
+
             if (cardResult.paid) {
                 order.paid = true
                 order.status = OrderStatus.CONFIRMADO
                 order.chargeId = cardResult.chargeId
                 orderRepository.save(order)
+            } else {
+                // 🔹 caso AUTHORIZED ou PROCESSING
+                order.chargeId = cardResult.chargeId
+                orderRepository.save(order)
+
+                // TTL = 5 minutos (ou o que vc configurou em application.yml)
+                val expiresAt = requireNotNull(order.reserveExpiresAt).toInstant()
+                cardWatcher.watch(cardResult.chargeId!!, expiresAt)
             }
-    
-            log.info(
-                "CHECKOUT CARTÃO OK: orderId={}, txid={}, paid={}, chargeId={}",
-                order.id, txid, cardResult.paid, cardResult.chargeId
-            )
-    
+
             return CheckoutResponse(
                 qrCode = null,
                 qrCodeBase64 = null,
@@ -121,7 +118,7 @@
                 chargeId = cardResult.chargeId
             )
         }
-    
+
         // ------------------- HELPERS -------------------
         data class QrPayload(val qrCode: String, val qrCodeBase64: String)
         data class CardChargeResult(val paid: Boolean, val chargeId: String?)
