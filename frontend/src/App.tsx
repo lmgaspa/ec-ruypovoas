@@ -40,8 +40,8 @@ function App() {
           <Route path="/books/:id" element={<BookPage />} />
           <Route path="/cart" element={<CartPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
-          <Route path="/pix" element={<PixPaymentPage />} />
-          <Route path="/card" element={<CardPaymentPage />} />
+          <Route path="/pagamento-pix" element={<PixPaymentPage />} />
+          <Route path="/pagamento-cartao" element={<CardPaymentPage />} />
           <Route path="/pedido-confirmado" element={<PedidoConfirmado />} />
         </Routes>
       </main>

@@ -23,7 +23,7 @@ interface CheckoutFormProps {
     email: string;
     note: string;
     delivery: string;
-    payment: string;
+    payment: string; // "pix" | "card"
   };
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
@@ -36,7 +36,7 @@ interface CheckoutFormProps {
 const CheckoutForm: React.FC<CheckoutFormProps> = (props) => {
   const navigate = useNavigate();
 
-  const handlePixCheckout = () => {
+  const handleCheckout = () => {
     if (!props.cartItems.length) {
       alert("Seu carrinho está vazio.");
       return;
@@ -62,20 +62,31 @@ const CheckoutForm: React.FC<CheckoutFormProps> = (props) => {
       alert("Celular inválido. Use o formato (xx)9xxxx-xxxx."); return;
     }
 
-    navigate("/pagamento-pix", {
-      state: {
-        form: props.form,
-        cartItems: props.cartItems,
-        total: props.total,
-        shipping: props.shipping,
-      },
-    });
+    if (props.form.payment === "pix") {
+      navigate("/pagamento-pix", {
+        state: {
+          form: props.form,
+          cartItems: props.cartItems,
+          total: props.total,
+          shipping: props.shipping,
+        },
+      });
+      return;
+    }
+
+    if (props.form.payment === "card") {
+      // Sem coletar dados aqui; a próxima tela tokeniza via Efí
+      navigate("/pagamento-cartao");
+      return;
+    }
+
+    alert("Forma de pagamento inválida.");
   };
 
   return (
     <CheckoutFormView
       {...props}
-      handlePixCheckout={handlePixCheckout}
+      handleCheckout={handleCheckout}
     />
   );
 };

@@ -22,14 +22,14 @@ interface CheckoutFormViewProps {
     email: string;
     note: string;
     delivery: string;
-    payment: string;
+    payment: string; // "pix" | "card"
   };
   handleChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => void;
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
-  handlePixCheckout: () => void;
+  handleCheckout: () => void; // << mudou
   onNavigateBack: () => void;
 }
 
@@ -41,7 +41,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   handleChange,
   updateQuantity,
   removeItem,
-  handlePixCheckout,
+  handleCheckout,
   onNavigateBack,
 }) => (
   <div className="max-w-5xl mx-auto py-12 px-4">
@@ -60,123 +60,49 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         <h2 className="text-lg font-bold">DADOS DE COBRANÇA E ENTREGA</h2>
 
         <div className="grid grid-cols-2 gap-4">
-          <input
-            id="firstName"
-            name="firstName"
-            autoComplete="given-name"
-            value={form.firstName}
-            onChange={handleChange}
-            placeholder="Nome"
-            className="border p-2"
-          />
-          <input
-            id="lastName"
-            name="lastName"
-            autoComplete="family-name"
-            value={form.lastName}
-            onChange={handleChange}
-            placeholder="Sobrenome"
-            className="border p-2"
-          />
+          <input id="firstName" name="firstName" autoComplete="given-name" value={form.firstName} onChange={handleChange} placeholder="Nome" className="border p-2" />
+          <input id="lastName" name="lastName" autoComplete="family-name" value={form.lastName} onChange={handleChange} placeholder="Sobrenome" className="border p-2" />
 
-          {/* CPF — mantido e otimizado pro Autofill/Inspector */}
-          <input
-            id="cpf"
-            name="cpf"
-            autoComplete="on"
-            inputMode="numeric"
-            value={form.cpf}
-            onChange={handleChange}
-            placeholder="CPF"
-            className="border p-2 col-span-2"
-          />
+          {/* CPF visível e bem identificado */}
+          <input id="cpf" name="cpf" autoComplete="on" inputMode="numeric" value={form.cpf} onChange={handleChange} placeholder="CPF" className="border p-2 col-span-2" />
 
           <input value="Brasil" disabled className="border p-2 col-span-2" />
+          <input id="cep" name="cep" autoComplete="postal-code" inputMode="numeric" value={form.cep} onChange={handleChange} placeholder="CEP (Ex: 00000-000)" className="border p-2 col-span-2" />
+          <input id="address" name="address" autoComplete="address-line1" value={form.address} onChange={handleChange} placeholder="Endereço" className="border p-2 col-span-2" />
+          <input id="number" name="number" autoComplete="address-line2" value={form.number} onChange={handleChange} placeholder="Número" className="border p-2" />
+          <input id="complement" name="complement" autoComplete="address-line2" value={form.complement} onChange={handleChange} placeholder="Complemento (opcional)" className="border p-2" />
+          <input id="district" name="district" autoComplete="address-level3" value={form.district} onChange={handleChange} placeholder="Bairro" className="border p-2" />
+          <input id="city" name="city" autoComplete="address-level2" value={form.city} onChange={handleChange} placeholder="Cidade" className="border p-2" />
+          <input id="state" name="state" autoComplete="address-level1" value={form.state} onChange={handleChange} placeholder="Estado" className="border p-2" />
+          <input id="phone" name="phone" autoComplete="tel" inputMode="tel" value={form.phone} onChange={handleChange} placeholder="Celular" className="border p-2 col-span-2" />
+          <input id="email" name="email" autoComplete="email" type="email" value={form.email} onChange={handleChange} placeholder="E-mail" className="border p-2 col-span-2" />
+        </div>
 
-          <input
-            id="cep"
-            name="cep"
-            autoComplete="postal-code"
-            inputMode="numeric"
-            value={form.cep}
-            onChange={handleChange}
-            placeholder="CEP (Ex: 00000-000)"
-            className="border p-2 col-span-2"
-          />
-          <input
-            id="address"
-            name="address"
-            autoComplete="address-line1"
-            value={form.address}
-            onChange={handleChange}
-            placeholder="Endereço"
-            className="border p-2 col-span-2"
-          />
-          <input
-            id="number"
-            name="number"
-            autoComplete="address-line2"
-            value={form.number}
-            onChange={handleChange}
-            placeholder="Número"
-            className="border p-2"
-          />
-          <input
-            id="complement"
-            name="complement"
-            autoComplete="address-line2"
-            value={form.complement}
-            onChange={handleChange}
-            placeholder="Complemento (opcional)"
-            className="border p-2"
-          />
-          <input
-            id="district"
-            name="district"
-            autoComplete="address-level3"
-            value={form.district}
-            onChange={handleChange}
-            placeholder="Bairro"
-            className="border p-2"
-          />
-          <input
-            id="city"
-            name="city"
-            autoComplete="address-level2"
-            value={form.city}
-            onChange={handleChange}
-            placeholder="Cidade"
-            className="border p-2"
-          />
-          <input
-            id="state"
-            name="state"
-            autoComplete="address-level1"
-            value={form.state}
-            onChange={handleChange}
-            placeholder="Estado"
-            className="border p-2"
-          />
-          <input
-            id="phone"
-            name="phone"
-            autoComplete="tel"
-            inputMode="tel"
-            value={form.phone}
-            onChange={handleChange}
-            placeholder="Celular"
-            className="border p-2 col-span-2"
-          />
-          <input
-            id="email"
-            name="email"
-            autoComplete="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-            placeholder="E-mail"
-            className="border p-2 col-span-2"
-          />
+        {/* Pagamento: Pix ou Cartão (sem coletar dados aqui) */}
+        <div className="mt-4">
+          <h3 className="text-md font-semibold mb-2">FORMA DE PAGAMENTO</h3>
+          <div className="flex items-center gap-6">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="payment"
+                value="pix"
+                checked={form.payment === "pix"}
+                onChange={handleChange}
+              />
+              <span>Pix</span>
+            </label>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="radio"
+                name="payment"
+                value="card"
+                checked={form.payment === "card"}
+                onChange={handleChange}
+              />
+              <span>Cartão de Crédito</span>
+            </label>
+          </div>
         </div>
 
         <div>
@@ -204,13 +130,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
                 <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
                 <span className="text-sm">{item.quantity}</span>
                 <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
-                <button
-                  type="button"
-                  className="ml-2 text-red-500 text-xs hover:underline"
-                  onClick={() => removeItem(item.id)}
-                >
-                  Remover
-                </button>
+                <button type="button" className="ml-2 text-red-500 text-xs hover:underline" onClick={() => removeItem(item.id)}>Remover</button>
               </div>
             </div>
             <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
@@ -228,15 +148,17 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         </div>
 
         <p className="text-xs text-center text-red-600 mt-4">
-          Você pagará via Pix na próxima etapa.
+          {form.payment === "pix"
+            ? "Você pagará via Pix na próxima etapa."
+            : "Você informará os dados do cartão na próxima etapa."}
         </p>
 
         <button
-          onClick={handlePixCheckout}
+          onClick={handleCheckout}
           type="button"
           className="bg-red-600 text-white py-2 w-full mt-4 rounded hover:bg-red-500 transition"
         >
-          Finalizar Pagamento por Pix
+          {form.payment === "pix" ? "Finalizar Pagamento por Pix" : "Ir para pagamento com Cartão"}
         </button>
       </div>
     </div>
