@@ -1,19 +1,35 @@
 import React from "react";
 import { formatPrice } from "../../utils/formatPrice";
 import type { CartItem } from "../../context/CartTypes";
-import type { CheckoutFormData } from "../../types/checkoutTypes";
 
 interface CheckoutFormViewProps {
   cartItems: CartItem[];
-  total: number; // itens + frete
+  total: number;     // já com frete somado
   shipping: number;
-  form: CheckoutFormData;
+  form: {
+    firstName: string;
+    lastName: string;
+    cpf: string;
+    country: string;
+    cep: string;
+    address: string;
+    number: string;
+    complement: string;
+    district: string;
+    city: string;
+    state: string;
+    phone: string;
+    email: string;
+    note: string;
+    delivery: string;
+    payment: string;
+  };
   handleChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => void;
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
-  handleCheckout: () => void;
+  handlePixCheckout: () => void;
   onNavigateBack: () => void;
 }
 
@@ -25,12 +41,11 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   handleChange,
   updateQuantity,
   removeItem,
-  handleCheckout,
+  handlePixCheckout,
   onNavigateBack,
 }) => (
   <div className="max-w-5xl mx-auto py-12 px-4">
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-6">
-      {/* Dados do cliente */}
       <div className="lg:col-span-2 space-y-6">
         <div className="mb-4">
           <button
@@ -45,35 +60,129 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         <h2 className="text-lg font-bold">DADOS DE COBRANÇA E ENTREGA</h2>
 
         <div className="grid grid-cols-2 gap-4">
-          <input name="firstName" value={form.firstName} onChange={handleChange} placeholder="Nome" className="border p-2" />
-          <input name="lastName" value={form.lastName} onChange={handleChange} placeholder="Sobrenome" className="border p-2" />
-          <input name="cpf" value={form.cpf} onChange={handleChange} placeholder="CPF" className="border p-2 col-span-2" />
+          <input
+            id="firstName"
+            name="firstName"
+            autoComplete="given-name"
+            value={form.firstName}
+            onChange={handleChange}
+            placeholder="Nome"
+            className="border p-2"
+          />
+          <input
+            id="lastName"
+            name="lastName"
+            autoComplete="family-name"
+            value={form.lastName}
+            onChange={handleChange}
+            placeholder="Sobrenome"
+            className="border p-2"
+          />
+
+          {/* CPF — mantido e otimizado pro Autofill/Inspector */}
+          <input
+            id="cpf"
+            name="cpf"
+            autoComplete="on"
+            inputMode="numeric"
+            value={form.cpf}
+            onChange={handleChange}
+            placeholder="CPF"
+            className="border p-2 col-span-2"
+          />
+
           <input value="Brasil" disabled className="border p-2 col-span-2" />
-          <input name="cep" value={form.cep} onChange={handleChange} placeholder="CEP (Ex: 00000-000)" className="border p-2 col-span-2" />
-          <input name="address" value={form.address} onChange={handleChange} placeholder="Endereço" className="border p-2 col-span-2" />
-          <input name="number" value={form.number} onChange={handleChange} placeholder="Número" className="border p-2" />
-          <input name="complement" value={form.complement} onChange={handleChange} placeholder="Complemento (opcional)" className="border p-2" />
-          <input name="district" value={form.district} onChange={handleChange} placeholder="Bairro" className="border p-2" />
-          <input name="city" value={form.city} onChange={handleChange} placeholder="Cidade" className="border p-2" />
-          <input name="state" value={form.state} onChange={handleChange} placeholder="Estado" className="border p-2" />
-          <input name="phone" value={form.phone} onChange={handleChange} placeholder="Celular" className="border p-2 col-span-2" />
-          <input name="email" value={form.email} onChange={handleChange} placeholder="E-mail" className="border p-2 col-span-2" />
 
-          <select name="delivery" value={form.delivery} onChange={handleChange} className="border p-2 col-span-2">
-            <option value="">Selecione o tipo de entrega</option>
-            <option value="normal">Entrega Normal</option>
-            <option value="express">Entrega Expressa</option>
-          </select>
-
-          <select name="payment" value={form.payment} onChange={handleChange} className="border p-2 col-span-2">
-            <option value="pix">Pix</option>
-            <option value="card">Cartão de Crédito</option>
-          </select>
+          <input
+            id="cep"
+            name="cep"
+            autoComplete="postal-code"
+            inputMode="numeric"
+            value={form.cep}
+            onChange={handleChange}
+            placeholder="CEP (Ex: 00000-000)"
+            className="border p-2 col-span-2"
+          />
+          <input
+            id="address"
+            name="address"
+            autoComplete="address-line1"
+            value={form.address}
+            onChange={handleChange}
+            placeholder="Endereço"
+            className="border p-2 col-span-2"
+          />
+          <input
+            id="number"
+            name="number"
+            autoComplete="address-line2"
+            value={form.number}
+            onChange={handleChange}
+            placeholder="Número"
+            className="border p-2"
+          />
+          <input
+            id="complement"
+            name="complement"
+            autoComplete="address-line2"
+            value={form.complement}
+            onChange={handleChange}
+            placeholder="Complemento (opcional)"
+            className="border p-2"
+          />
+          <input
+            id="district"
+            name="district"
+            autoComplete="address-level3"
+            value={form.district}
+            onChange={handleChange}
+            placeholder="Bairro"
+            className="border p-2"
+          />
+          <input
+            id="city"
+            name="city"
+            autoComplete="address-level2"
+            value={form.city}
+            onChange={handleChange}
+            placeholder="Cidade"
+            className="border p-2"
+          />
+          <input
+            id="state"
+            name="state"
+            autoComplete="address-level1"
+            value={form.state}
+            onChange={handleChange}
+            placeholder="Estado"
+            className="border p-2"
+          />
+          <input
+            id="phone"
+            name="phone"
+            autoComplete="tel"
+            inputMode="tel"
+            value={form.phone}
+            onChange={handleChange}
+            placeholder="Celular"
+            className="border p-2 col-span-2"
+          />
+          <input
+            id="email"
+            name="email"
+            autoComplete="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            placeholder="E-mail"
+            className="border p-2 col-span-2"
+          />
         </div>
 
         <div>
           <h2 className="text-lg font-bold mt-6">INFORMAÇÕES ADICIONAIS</h2>
           <textarea
+            id="note"
             name="note"
             value={form.note}
             onChange={handleChange}
@@ -83,7 +192,6 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         </div>
       </div>
 
-      {/* Resumo do pedido */}
       <div>
         <h2 className="text-lg font-bold">SEU PEDIDO</h2>
 
@@ -96,7 +204,13 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
                 <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
                 <span className="text-sm">{item.quantity}</span>
                 <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
-                <button type="button" className="ml-2 text-red-500 text-xs hover:underline" onClick={() => removeItem(item.id)}>Remover</button>
+                <button
+                  type="button"
+                  className="ml-2 text-red-500 text-xs hover:underline"
+                  onClick={() => removeItem(item.id)}
+                >
+                  Remover
+                </button>
               </div>
             </div>
             <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
@@ -114,17 +228,15 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
         </div>
 
         <p className="text-xs text-center text-red-600 mt-4">
-          {form.payment === "pix"
-            ? "Você pagará via Pix na próxima etapa."
-            : "Você informará os dados do cartão na próxima etapa."}
+          Você pagará via Pix na próxima etapa.
         </p>
 
         <button
-          onClick={handleCheckout}
+          onClick={handlePixCheckout}
           type="button"
           className="bg-red-600 text-white py-2 w-full mt-4 rounded hover:bg-red-500 transition"
         >
-          {form.payment === "pix" ? "Finalizar Pagamento por Pix" : "Ir para pagamento com Cartão"}
+          Finalizar Pagamento por Pix
         </button>
       </div>
     </div>

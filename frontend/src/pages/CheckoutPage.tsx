@@ -4,47 +4,71 @@ import { useCart } from "../hooks/useCart";
 import { formatCep, formatCpf, formatCelular } from "../utils/masks";
 import CheckoutForm from "./CheckoutForm";
 import type { CartItem } from "../context/CartTypes";
-import type { CheckoutFormData } from "../types/checkoutTypes";
 import { calcularFreteComBaseEmCarrinho } from "../utils/freteUtils";
 import { getStockByIds } from "../api/stock";
+
+type FormState = {
+  firstName: string;
+  lastName: string;
+  cpf: string;
+  country: string;
+  cep: string;
+  address: string;
+  number: string;
+  complement: string;
+  district: string;
+  city: string;
+  state: string;
+  phone: string;
+  email: string;
+  note: string;
+  delivery: string;
+  payment: string;
+  shipping?: number;
+};
+
+const DEFAULT_FORM: FormState = {
+  firstName: "",
+  lastName: "",
+  cpf: "",
+  country: "Brasil",
+  cep: "",
+  address: "",
+  number: "",
+  complement: "",
+  district: "",
+  city: "",
+  state: "",
+  phone: "",
+  email: "",
+  note: "",
+  delivery: "",
+  payment: "pix",
+  shipping: 0,
+};
 
 const CheckoutPage = () => {
   const navigate = useNavigate();
   const { getCart } = useCart();
 
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [totalItems, setTotalItems] = useState(0); // só itens
+  const [totalItems, setTotalItems] = useState(0); // soma dos itens
   const [shipping, setShipping] = useState(0);
   const [stockById, setStockById] = useState<Record<string, number>>({});
 
-  const [form, setForm] = useState<CheckoutFormData>(() => {
-    const saved = localStorage.getItem("checkoutForm");
-    return saved
-      ? JSON.parse(saved)
-      : {
-          firstName: "",
-          lastName: "",
-          cpf: "",
-          country: "Brasil",
-          cep: "",
-          address: "",
-          number: "",
-          complement: "",
-          district: "",
-          city: "",
-          state: "",
-          phone: "",
-          email: "",
-          note: "",
-          delivery: "",
-          payment: "pix",
-          shipping: 0,
-        };
+  // Formulário com reidratação e SEM reinit ao mudar carrinho
+  const [form, setForm] = useState<FormState>(() => {
+    try {
+      const saved = localStorage.getItem("checkoutForm");
+      return saved ? { ...DEFAULT_FORM, ...JSON.parse(saved) } : DEFAULT_FORM;
+    } catch {
+      return DEFAULT_FORM;
+    }
   });
 
   const onNavigateBack = () => navigate("/books");
 
-  // Carrega carrinho e ajusta por estoque
+  // Carrinho + estoque (não toca no form)
   useEffect(() => {
     const cart = getCart();
     (async () => {
@@ -76,7 +100,7 @@ const CheckoutPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Normaliza para cálculo de frete
+  // Normaliza p/ frete
   const cpfCepInfo = useMemo(() => {
     const cpf = form.cpf.replace(/\D/g, "");
     const cep = form.cep.replace(/\D/g, "");
@@ -84,7 +108,7 @@ const CheckoutPage = () => {
     return { cpf, cep, phone };
   }, [form.cpf, form.cep, form.phone]);
 
-  // Calcula frete
+  // Frete (não reseta form)
   useEffect(() => {
     if (
       cpfCepInfo.cpf === "00000000000" ||
@@ -103,11 +127,12 @@ const CheckoutPage = () => {
       .catch(() => setShipping(0));
   }, [cpfCepInfo, cartItems]);
 
-  // Persiste form + shipping (para CardPaymentPage ler)
+  // Persistência do form + shipping a cada alteração de qualquer campo
   useEffect(() => {
     localStorage.setItem("checkoutForm", JSON.stringify({ ...form, shipping }));
   }, [form, shipping]);
 
+  // ++ / -- (não reinit form)
   const updateQuantity = (id: string, delta: number) => {
     const updated = cartItems
       .map((item) => {
@@ -121,7 +146,7 @@ const CheckoutPage = () => {
         if (next <= 0) return null;
         return { ...item, quantity: next };
       })
-      .filter((item): item is CartItem => item !== null);
+      .filter((it): it is CartItem => it !== null);
 
     setCartItems(updated);
     localStorage.setItem("cart", JSON.stringify(updated));
@@ -139,11 +164,12 @@ const CheckoutPage = () => {
     if (!updated.length) setShipping(0);
   };
 
+  // Mudanças de campos (inputs/textarea) + máscaras + ViaCEP
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
-    const { name, value: inputValue } = e.target;
-    let value = inputValue;
+    const { name, value: raw } = e.target;
+    let value = raw;
 
     if (name === "cep") value = formatCep(value);
     if (name === "cpf") value = formatCpf(value);

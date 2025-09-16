@@ -1,18 +1,34 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import type { CartItem } from "../context/CartTypes";
-import type { CheckoutFormData } from "../types/checkoutTypes";
 import CheckoutFormView from "../components/checkout/CheckoutFormView";
 
 interface CheckoutFormProps {
   cartItems: CartItem[];
   total: number;    // itens + frete
   shipping: number;
-  form: CheckoutFormData;
+  form: {
+    firstName: string;
+    lastName: string;
+    cpf: string;
+    country: string;
+    cep: string;
+    address: string;
+    number: string;
+    complement: string;
+    district: string;
+    city: string;
+    state: string;
+    phone: string;
+    email: string;
+    note: string;
+    delivery: string;
+    payment: string;
+  };
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
   handleChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => void;
   onNavigateBack: () => void;
 }
@@ -20,20 +36,18 @@ interface CheckoutFormProps {
 const CheckoutForm: React.FC<CheckoutFormProps> = (props) => {
   const navigate = useNavigate();
 
-  const handleCheckout = () => {
+  const handlePixCheckout = () => {
     if (!props.cartItems.length) {
       alert("Seu carrinho está vazio.");
       return;
     }
 
-    const requiredFields: (keyof CheckoutFormData)[] = [
+    const required: (keyof CheckoutFormProps["form"])[] = [
       "firstName","lastName","cpf","cep","address","number",
       "district","city","state","email","phone",
     ];
-    const missingField = requiredFields.find(
-      (field) => String(props.form[field] ?? "").trim() === ""
-    );
-    if (missingField) {
+    const missing = required.find((k) => String(props.form[k] ?? "").trim() === "");
+    if (missing) {
       alert("Por favor, preencha todos os campos obrigatórios.");
       return;
     }
@@ -48,34 +62,20 @@ const CheckoutForm: React.FC<CheckoutFormProps> = (props) => {
       alert("Celular inválido. Use o formato (xx)9xxxx-xxxx."); return;
     }
 
-    // Decisão por forma de pagamento
-    if (props.form.payment === "pix") {
-      navigate("/pix", {
-        state: {
-          form: props.form,
-          cartItems: props.cartItems,
-          total: props.total,
-          shipping: props.shipping,
-        },
-      });
-      return;
-    }
-
-    if (props.form.payment === "card") {
-      // Nada de coletar cartão aqui. Só ir para a tela de cartão.
-      // O CardPaymentPage já lê 'cart' e 'checkoutForm' do localStorage
-      // e faz a tokenização Efí.
-      navigate("/card");
-      return;
-    }
-
-    alert("Forma de pagamento inválida.");
+    navigate("/pagamento-pix", {
+      state: {
+        form: props.form,
+        cartItems: props.cartItems,
+        total: props.total,
+        shipping: props.shipping,
+      },
+    });
   };
 
   return (
     <CheckoutFormView
       {...props}
-      handleCheckout={handleCheckout}
+      handlePixCheckout={handlePixCheckout}
     />
   );
 };
