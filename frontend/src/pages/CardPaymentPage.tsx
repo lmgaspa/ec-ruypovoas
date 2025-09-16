@@ -1,8 +1,12 @@
 // src/pages/CardPaymentPage.tsx
 import { useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PaymentTokenResponse } from "../types/efipay";
+import { loadEfiCdn } from "../utils/loadEfiCdn";
 
+const EFI_SANDBOX = import.meta.env.VITE_EFI_SANDBOX === "false"; // opcional
+const EFI_PAYEE_CODE =
+  import.meta.env.VITE_EFI_PAYEE_CODE || "cf1a4eb72fb74687e6a95a3da1bd027b"; // opcional
 /** Tipos locais (somente para esta página) */
 interface CartItem {
   id: string;
@@ -36,8 +40,8 @@ interface CardData {
   number: string;
   holderName: string;
   expirationMonth: string; // "MM"
-  expirationYear: string;  // "AA"
-  cvv: string;             // 3 (Visa/Master) / 4 (Amex)
+  expirationYear: string; // "AA"
+  cvv: string; // 3 (Visa/Master) / 4 (Amex)
   brand: Brand;
 }
 
@@ -58,7 +62,10 @@ function formatCardNumber(value: string, brand: Brand): string {
       .trim();
   }
   // visa/master 16: 4-4-4-4
-  return digits.slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ").trim();
+  return digits
+    .slice(0, 16)
+    .replace(/(\d{4})(?=\d)/g, "$1 ")
+    .trim();
 }
 function formatMonthStrict(value: string): string {
   let d = value.replace(/\D/g, "").slice(0, 2);
@@ -85,7 +92,8 @@ function detectBrandFromDigits(digits: string): Brand | null {
   return null;
 }
 function isValidLuhn(numDigits: string): boolean {
-  let sum = 0, dbl = false;
+  let sum = 0,
+    dbl = false;
   for (let i = numDigits.length - 1; i >= 0; i--) {
     let n = Number(numDigits[i]);
     if (dbl) {
@@ -116,7 +124,8 @@ export default function CardPaymentPage() {
   );
 
   const shipping = Number(form?.shipping ?? 0);
-  const total = cart.reduce((acc, i) => acc + i.price * i.quantity, 0) + shipping;
+  const total =
+    cart.reduce((acc, i) => acc + i.price * i.quantity, 0) + shipping;
 
   const [brand, setBrand] = useState<Brand>("visa");
   const [card, setCard] = useState<CardData>({
@@ -131,6 +140,11 @@ export default function CardPaymentPage() {
   const [installments, setInstallments] = useState<number>(1); // 1..6 sem juros
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  // carrega o SDK Efí com seu payee_code
+  useEffect(() => {
+    loadEfiCdn({ sandbox: EFI_SANDBOX, payeeCode: EFI_PAYEE_CODE });
+  }, []);
 
   // Proteção: se não houver carrinho/total válido, volta ao checkout
   if (!Array.isArray(cart) || cart.length === 0 || total <= 0) {
@@ -156,16 +170,25 @@ export default function CardPaymentPage() {
   };
   const onChangeNumber = (e: React.ChangeEvent<HTMLInputElement>) => {
     const b = effectiveBrand;
-    setCard((prev) => ({ ...prev, number: formatCardNumber(e.target.value, b) }));
+    setCard((prev) => ({
+      ...prev,
+      number: formatCardNumber(e.target.value, b),
+    }));
   };
   const onChangeHolder = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCard((prev) => ({ ...prev, holderName: e.target.value }));
   };
   const onChangeMonth = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCard((prev) => ({ ...prev, expirationMonth: formatMonthStrict(e.target.value) }));
+    setCard((prev) => ({
+      ...prev,
+      expirationMonth: formatMonthStrict(e.target.value),
+    }));
   };
   const onChangeYear = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCard((prev) => ({ ...prev, expirationYear: formatYearStrict(e.target.value) }));
+    setCard((prev) => ({
+      ...prev,
+      expirationYear: formatYearStrict(e.target.value),
+    }));
   };
   const onChangeCvv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const b = effectiveBrand;
@@ -186,7 +209,8 @@ export default function CardPaymentPage() {
   const yearOk = /^\d{2}$/.test(card.expirationYear);
   const cvvOk = new RegExp(`^\\d{${cvvLen}}$`).test(card.cvv);
 
-  const canPay = !loading && luhnOk && holderOk && monthOk && yearOk && cvvOk && total > 0;
+  const canPay =
+    !loading && luhnOk && holderOk && monthOk && yearOk && cvvOk && total > 0;
 
   const perInstallment = useMemo(() => {
     if (installments <= 1) return total;
@@ -199,7 +223,9 @@ export default function CardPaymentPage() {
     setErrorMsg(null);
 
     if (!window.$gn) {
-      setErrorMsg("SDK de pagamentos não carregou ainda. Tente novamente em alguns segundos.");
+      setErrorMsg(
+        "SDK de pagamentos não carregou ainda. Tente novamente em alguns segundos."
+      );
       setLoading(false);
       return;
     }
@@ -249,14 +275,19 @@ export default function CardPaymentPage() {
             });
 
             if (!res.ok) throw new Error(await res.text());
-            const data: { message?: string; orderId?: string; paid?: boolean } = await res.json();
+            const data: { message?: string; orderId?: string; paid?: boolean } =
+              await res.json();
 
             localStorage.removeItem("cart");
             navigate(
-              `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${data.paid ? "true" : "false"}`
+              `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${
+                data.paid ? "true" : "false"
+              }`
             );
           } catch (e) {
-            setErrorMsg(e instanceof Error ? e.message : "Erro inesperado no pagamento.");
+            setErrorMsg(
+              e instanceof Error ? e.message : "Erro inesperado no pagamento."
+            );
           } finally {
             setLoading(false);
           }
@@ -271,7 +302,11 @@ export default function CardPaymentPage() {
 
       {/* Bandeira */}
       <label className="block text-sm font-medium mb-1">Bandeira</label>
-      <select value={brand} onChange={onChangeBrand} className="border p-2 w-full mb-4 rounded">
+      <select
+        value={brand}
+        onChange={onChangeBrand}
+        className="border p-2 w-full mb-4 rounded"
+      >
         <option value="visa">Visa</option>
         <option value="mastercard">Mastercard</option>
         <option value="amex">American Express</option>
@@ -331,7 +366,9 @@ export default function CardPaymentPage() {
       />
 
       {/* Parcelas sem juros */}
-      <label className="block text-sm font-medium mb-1">Parcelas (sem juros)</label>
+      <label className="block text-sm font-medium mb-1">
+        Parcelas (sem juros)
+      </label>
       <select
         className="border p-2 w-full rounded mb-2"
         value={installments}
@@ -339,16 +376,23 @@ export default function CardPaymentPage() {
       >
         {[1, 2, 3, 4, 5, 6].map((n) => (
           <option value={n} key={n}>
-            {n}x {n === 1 ? "(à vista)" : `de R$ ${perInstallmentFor(total, n)}`} sem juros
+            {n}x{" "}
+            {n === 1 ? "(à vista)" : `de R$ ${perInstallmentFor(total, n)}`} sem
+            juros
           </option>
         ))}
       </select>
       <p className="text-sm text-gray-600 mb-4">
-        {installments}x de R$ {perInstallment.toFixed(2)} (total R$ {total.toFixed(2)}) — sem juros
+        {installments}x de R$ {perInstallment.toFixed(2)} (total R${" "}
+        {total.toFixed(2)}) — sem juros
       </p>
 
       {/* Erro */}
-      {errorMsg && <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>}
+      {errorMsg && (
+        <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">
+          {errorMsg}
+        </div>
+      )}
 
       <button
         disabled={!canPay}

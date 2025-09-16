@@ -61,7 +61,10 @@ logging:
     org.hibernate: warn
     org.hibernate.orm.connections.pooling: warn
     com.zaxxer.hikari: warn
-    # com.luizgasparetto.backend.monolito: info   # (ligue se quiser ver logs do reaper)
+    com.luizgasparetto.backend.monolito: info   # ✅ deixe LIGADO para ver logs do fluxo
+    com.luizgasparetto.backend.monolito.services.PixWatcher: debug
+    com.luizgasparetto.backend.monolito.services.CardWatcher: debug
+    com.luizgasparetto.backend.monolito.services.PaymentProcessor: debug
 
 email:
   author: ${EMAIL_AUTHOR}

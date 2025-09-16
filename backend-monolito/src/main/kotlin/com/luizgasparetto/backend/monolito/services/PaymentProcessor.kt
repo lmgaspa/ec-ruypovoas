@@ -1,3 +1,4 @@
+// src/main/kotlin/com/luizgasparetto/backend/monolito/services/PaymentProcessor.kt
 package com.luizgasparetto.backend.monolito.services
 
 import com.luizgasparetto.backend.monolito.models.OrderStatus
@@ -15,7 +16,7 @@ class PaymentProcessor(
 ) {
     private val log = LoggerFactory.getLogger(PaymentProcessor::class.java)
 
-    private fun isPaidStatus(status: String?) =
+    private fun isPaidStatus(status: String?): Boolean =
         status != null && status.lowercase() in listOf("pago", "paid", "approved", "confirmed")
 
     @Transactional
@@ -26,16 +27,22 @@ class PaymentProcessor(
 
         order.paid = true
         order.paidAt = OffsetDateTime.now()
-        order.status = OrderStatus.CONFIRMADO
-        order.reserveExpiresAt = null
+        order.status = OrderStatus.PAGO
         orderRepository.save(order)
 
-        // efeitos colaterais (uma única vez)
-        runCatching { emailService.sendClientEmail(order) }.onFailure { log.warn("email cliente falhou: {}", it.message) }
-        runCatching { emailService.sendAuthorEmail(order) }.onFailure { log.warn("email autor falhou: {}", it.message) }
-        runCatching { events.publishPaid(order.id!!) }.onFailure { log.warn("SSE falhou: {}", it.message) }
-
         log.info("Pedido pago via PIX: orderId={}, txid={}", order.id, txid)
+
+        // dispare SSE e e-mails
+        runCatching { events.publishPaid(order.id!!) }.onFailure {
+            log.warn("Falha ao publicar SSE pago orderId={}: {}", order.id, it.message)
+        }
+        runCatching {
+            emailService.sendClientEmail(order)
+            emailService.sendAuthorEmail(order)
+        }.onFailure {
+            log.warn("Falha ao enviar e-mails orderId={}: {}", order.id, it.message)
+        }
+
         return true
     }
 
@@ -47,15 +54,22 @@ class PaymentProcessor(
 
         order.paid = true
         order.paidAt = OffsetDateTime.now()
-        order.status = OrderStatus.CONFIRMADO
-        order.reserveExpiresAt = null
+        order.status = OrderStatus.PAGO
         orderRepository.save(order)
 
-        runCatching { emailService.sendClientEmail(order) }.onFailure { log.warn("email cliente falhou: {}", it.message) }
-        runCatching { emailService.sendAuthorEmail(order) }.onFailure { log.warn("email autor falhou: {}", it.message) }
-        runCatching { events.publishPaid(order.id!!) }.onFailure { log.warn("SSE falhou: {}", it.message) }
-
         log.info("Pedido pago via cartão: orderId={}, chargeId={}", order.id, chargeId)
+
+        // dispare SSE e e-mails
+        runCatching { events.publishPaid(order.id!!) }.onFailure {
+            log.warn("Falha ao publicar SSE pago orderId={}: {}", order.id, it.message)
+        }
+        runCatching {
+            emailService.sendClientEmail(order)
+            emailService.sendAuthorEmail(order)
+        }.onFailure {
+            log.warn("Falha ao enviar e-mails orderId={}: {}", order.id, it.message)
+        }
+
         return true
     }
 }
