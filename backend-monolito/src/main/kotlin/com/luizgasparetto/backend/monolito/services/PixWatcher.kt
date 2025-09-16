@@ -1,9 +1,10 @@
 package com.luizgasparetto.backend.monolito.services
 
 import org.slf4j.LoggerFactory
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Service
 class PixWatcher(
@@ -11,46 +12,32 @@ class PixWatcher(
     private val processor: PaymentProcessor
 ) {
     private val log = LoggerFactory.getLogger(PixWatcher::class.java)
-    private val scheduler = ThreadPoolTaskScheduler().apply {
-        poolSize = 2
-        setThreadNamePrefix("pix-watch-")
-        initialize()
-    }
+    private val scheduler = Executors.newScheduledThreadPool(4)
 
-    // Tentativas (s): 10, 20, 30, 60, 120, 300
-    private val delays = listOf(10L, 20L, 30L, 60L, 120L, 300L)
+    private fun isPaidStatus(status: String?): Boolean =
+        status != null && status.lowercase() in listOf("pago", "paid", "approved", "confirmed")
 
-    fun watch(txid: String, expireAt: Instant) {
-        scheduleAttempt(txid, 0, expireAt)
-    }
+    private fun isDeclinedStatus(status: String?): Boolean =
+        status != null && status.lowercase() in listOf("cancelado", "canceled", "denied", "declined")
 
-    private fun scheduleAttempt(txid: String, attempt: Int, expireAt: Instant) {
-        if (attempt >= delays.size) {
-            log.info("POLL: esgotadas tentativas para txid={}", txid)
-            return
-        }
-        val delay = delays[attempt]
-        val runAt = Instant.now().plusSeconds(delay)
-
-        // Não agenda além do TTL (+10s de folga)
-        val lastMoment = expireAt.plusSeconds(10)
-        if (runAt.isAfter(lastMoment)) {
-            log.info("POLL: parando (além do TTL) txid={}", txid)
-            return
-        }
-
-        log.info("POLL: agendando tentativa {} para txid={} em {}s", attempt + 1, txid, delay)
-        scheduler.schedule({
+    fun watch(txid: String, expiresAt: Instant) {
+        scheduler.scheduleAtFixedRate({
             try {
                 val status = pixClient.status(txid)
-                log.info("POLL: tentativa {} txid={} status={}", attempt + 1, txid, status)
-                if (processor.isPaidStatus(status) || processor.isDeclinedStatus(status)) {
-                    if (processor.markPaidIfNeededByTxid(txid, status)) return@schedule
+
+                if (isPaidStatus(status)) {
+                    processor.markPaidIfNeededByTxid(txid, status)
+                    log.info("Watcher PIX finalizado: pago txid={}", txid)
+                    return@scheduleAtFixedRate
+                }
+
+                if (isDeclinedStatus(status) || Instant.now().isAfter(expiresAt)) {
+                    log.info("Watcher PIX encerrado: expirado/cancelado txid={}, status={}", txid, status)
+                    return@scheduleAtFixedRate
                 }
             } catch (e: Exception) {
-                log.warn("POLL: erro na tentativa {} txid={}: {}", attempt + 1, txid, e.message)
+                log.warn("Erro no watcher PIX txid={}: {}", txid, e.message)
             }
-            scheduleAttempt(txid, attempt + 1, expireAt)
-        }, runAt)
+        }, 0, 10, TimeUnit.SECONDS)
     }
 }

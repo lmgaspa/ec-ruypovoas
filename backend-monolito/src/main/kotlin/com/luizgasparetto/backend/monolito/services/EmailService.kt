@@ -19,7 +19,7 @@ class EmailService(
     fun sendClientEmail(order: Order) {
         sendEmail(
             to = order.email,
-            subject = "Editora Nosso Lar – Ecommerce | Pagamento confirmado (#${order.id})",
+            subject = "✅ Pagamento confirmado (#${order.id}) – Editora Nosso Lar",
             html = buildHtmlMessage(order, isAuthor = false, declined = false)
         )
     }
@@ -27,7 +27,7 @@ class EmailService(
     fun sendAuthorEmail(order: Order) {
         sendEmail(
             to = authorEmail,
-            subject = "Novo pedido pago (#${order.id}) – Editora Nosso Lar",
+            subject = "📦 Novo pedido pago (#${order.id}) – Editora Nosso Lar",
             html = buildHtmlMessage(order, isAuthor = true, declined = false)
         )
     }
@@ -37,7 +37,7 @@ class EmailService(
     fun sendClientCardDeclined(order: Order) {
         sendEmail(
             to = order.email,
-            subject = "Editora Nosso Lar – Ecommerce | Pagamento não aprovado (#${order.id})",
+            subject = "❌ Pagamento não aprovado (#${order.id}) – Editora Nosso Lar",
             html = buildHtmlMessage(order, isAuthor = false, declined = true)
         )
     }
@@ -45,7 +45,7 @@ class EmailService(
     fun sendAuthorCardDeclined(order: Order) {
         sendEmail(
             to = authorEmail,
-            subject = "Pedido recusado (#${order.id}) – Editora Nosso Lar",
+            subject = "⚠️ Pedido recusado (#${order.id}) – Editora Nosso Lar",
             html = buildHtmlMessage(order, isAuthor = true, declined = true)
         )
     }
@@ -109,7 +109,7 @@ class EmailService(
 
         val noteBlock = order.note?.takeIf { it.isNotBlank() }?.let {
             """
-            <p style="margin:8px 0 0"><strong>Observação do cliente:</strong><br>${escapeHtml(it)}</p>
+            <p style="margin:8px 0 0"><strong>📝 Observação do cliente:</strong><br>${escapeHtml(it)}</p>
             """.trimIndent()
         } ?: ""
 
@@ -119,42 +119,57 @@ class EmailService(
             else -> "Pagamento"
         }
 
+        // 🔹 parcelas (só cartão e só se > 1)
+        val installmentsInfo =
+            if (!declined && order.paymentMethod.equals("card", ignoreCase = true)) {
+                if ((order.installments ?: 1) > 1) {
+                    val perInstallment = order.total.divide(
+                        java.math.BigDecimal(order.installments ?: 1),
+                        2, java.math.RoundingMode.HALF_UP
+                    )
+                    "<p><strong>💳 Parcelado em:</strong> ${order.installments}x de R$ %.2f sem juros</p>"
+                        .format(perInstallment.toDouble())
+                } else {
+                    "<p><strong>💳 Pagamento à vista no cartão.</strong></p>"
+                }
+            } else ""
+
         // ==================== MENSAGENS ====================
 
         val headerClient = if (declined) {
             """
             <p>Olá, <strong>${order.firstName} ${order.lastName}</strong>.</p>
-            <p>Infelizmente seu pagamento via <strong>$paymentMethod</strong> não foi aprovado ❌</p>
-            <p>Você pode tentar novamente com outro cartão ou escolher Pix.</p>
-            <p>Endereço de recebimento: $addressLine</p>
+            <p>❌ Seu pagamento via <strong>$paymentMethod</strong> não foi aprovado.</p>
+            <p>Tente novamente com outro cartão ou escolha Pix.</p>
+            <p>📍 Endereço de recebimento: $addressLine</p>
             $noteBlock
             """.trimIndent()
         } else {
             """
             <p>Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
-            <p>Recebemos o seu pagamento via <strong>$paymentMethod</strong>. Seu pedido foi confirmado 🎉</p>
-            <p>Endereço de recebimento: $addressLine</p>
+            <p>🎉 Recebemos o seu pagamento via <strong>$paymentMethod</strong>. Seu pedido foi confirmado.</p>
+            <p>📍 Endereço de recebimento: $addressLine</p>
             $noteBlock
             """.trimIndent()
         }
 
         val headerAuthor = if (declined) {
             """
-            <p><strong>Pedido recusado</strong> no site.</p>
-            <p>Cliente: ${order.firstName} ${order.lastName}</p>
-            <p>Email: ${order.email}</p>
-            <p>WhatsApp: <a href="$waHref">$maskedPhone</a></p>
-            <p>Endereço: $addressLine</p>
+            <p><strong>⚠️ Pedido recusado</strong> no site.</p>
+            <p>👤 Cliente: ${order.firstName} ${order.lastName}</p>
+            <p>✉️ Email: ${order.email}</p>
+            <p>📱 WhatsApp: <a href="$waHref">$maskedPhone</a></p>
+            <p>📍 Endereço: $addressLine</p>
             <p><strong>Pagamento:</strong> $paymentMethod (recusado)</p>
             $noteBlock
             """.trimIndent()
         } else {
             """
-            <p><strong>Novo pedido pago</strong> no site.</p>
-            <p>Cliente: ${order.firstName} ${order.lastName}</p>
-            <p>Email: ${order.email}</p>
-            <p>WhatsApp: <a href="$waHref">$maskedPhone</a></p>
-            <p>Endereço: $addressLine</p>
+            <p><strong>📦 Novo pedido pago</strong> no site.</p>
+            <p>👤 Cliente: ${order.firstName} ${order.lastName}</p>
+            <p>✉️ Email: ${order.email}</p>
+            <p>📱 WhatsApp: <a href="$waHref">$maskedPhone</a></p>
+            <p>📍 Endereço: $addressLine</p>
             <p><strong>Pagamento:</strong> $paymentMethod</p>
             $noteBlock
             """.trimIndent()
@@ -164,13 +179,14 @@ class EmailService(
 
         val txidLine =
             if (!declined && order.paymentMethod.equals("pix", ignoreCase = true))
-                order.txid?.let { "<p><strong>TXID Pix:</strong> $it</p>" }
+                order.txid?.let { "<p><strong>🔑 TXID Pix:</strong> $it</p>" }
             else null
 
         val contactBlock = if (!isAuthor) """
             <p style="margin:16px 0 0;color:#555">
               Em caso de dúvida, entre em contato com <strong>Editora Nosso Lar</strong><br>
-              Email: <a href="mailto:luhmgasparetto@gmail.com">luhmgasparetto@gmail.com</a> · WhatsApp: <a href="https://wa.me/5571994105740">(71) 99410-5740</a>
+              ✉️ Email: <a href="mailto:luhmgasparetto@gmail.com">luhmgasparetto@gmail.com</a> · 
+              📱 WhatsApp: <a href="https://wa.me/5571994105740">(71) 99410-5740</a>
             </p>
         """.trimIndent() else ""
 
@@ -179,24 +195,25 @@ class EmailService(
         <body style="font-family:Arial,Helvetica,sans-serif;background:#f6f7f9;padding:24px">
           <div style="max-width:640px;margin:0 auto;background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden">
             <div style="background:#111;color:#fff;padding:16px 20px">
-              <strong style="font-size:16px">Editora Nosso Lar – Ecommerce</strong>
+              <strong style="font-size:16px">📚 Editora Nosso Lar – Ecommerce</strong>
             </div>
             <div style="padding:20px">
               $who
 
-              <p><strong>Nº do pedido:</strong> #${order.id}</p>
+              <p><strong>🧾 Nº do pedido:</strong> #${order.id}</p>
               ${txidLine ?: ""}
 
               ${if (!declined) """
-              <h3 style="font-size:15px;margin:16px 0 8px">Itens</h3>
+              <h3 style="font-size:15px;margin:16px 0 8px">🛒 Itens</h3>
               <table width="100%">$itemsHtml</table>
 
-              <p><strong>Frete:</strong> $shipping<br>
-                 <strong>Total:</strong> $total<br>
-                 <strong>Pagamento:</strong> $paymentMethod</p>
+              <p><strong>🚚 Frete:</strong> $shipping<br>
+                 <strong>💰 Total:</strong> $total<br>
+                 <strong>💳 Pagamento:</strong> $paymentMethod</p>
+              $installmentsInfo
               """ else ""}
 
-              ${if (!isAuthor) "<p>${if (declined) "Tente novamente 💳 ou escolha Pix" else "Obrigado por comprar com a gente! 💛"}</p>" else ""}
+              ${if (!isAuthor) "<p>${if (declined) "💳 Tente novamente ou escolha Pix" else "💛 Obrigado por comprar com a gente!"}</p>" else ""}
 
               $contactBlock
             </div>

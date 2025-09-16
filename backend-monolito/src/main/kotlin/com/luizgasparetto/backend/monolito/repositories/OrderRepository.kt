@@ -15,9 +15,12 @@ interface OrderRepository : JpaRepository<Order, Long> {
     @EntityGraph(attributePaths = ["items"])
     fun findWithItemsByTxid(txid: String): Order?
 
-    // 🔹 Novo método para buscar pedidos por chargeId (cartão) // ALTERADO
     @EntityGraph(attributePaths = ["items"])
-    fun findWithItemsByChargeId(chargeId: String): Order? // ALTERADO
+    fun findWithItemsByChargeId(chargeId: String): Order?
+
+    // ✅ Novo método para suportar releaseReservationTx e PaymentController
+    @EntityGraph(attributePaths = ["items"])
+    fun findWithItemsById(id: Long): Order?
 
     @EntityGraph(attributePaths = ["items"])
     @Query(

@@ -3,7 +3,8 @@ package com.luizgasparetto.backend.monolito.jobs
 import com.luizgasparetto.backend.monolito.models.OrderStatus
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import com.luizgasparetto.backend.monolito.services.BookService
-import com.luizgasparetto.backend.monolito.services.PixClient   // ✅ importar
+import com.luizgasparetto.backend.monolito.services.PixClient
+import com.luizgasparetto.backend.monolito.services.CardClient
 import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Component
@@ -14,7 +15,8 @@ import java.time.OffsetDateTime
 class ReservationReaper(
     private val orderRepository: OrderRepository,
     private val bookService: BookService,
-    private val pixClient: PixClient                        // ✅ injetar
+    private val pixClient: PixClient,
+    private val cardClient: CardClient
 ) {
     private val log = LoggerFactory.getLogger(ReservationReaper::class.java)
 
@@ -33,22 +35,27 @@ class ReservationReaper(
                 released += item.quantity
             }
 
-            // 2) tenta cancelar a cobrança na Efí (não quebra a transação)
-            runCatching { pixClient.cancel(order.txid) }
-                .onSuccess { ok ->
-                    if (ok) log.info("REAPER: cobrança cancelada txid={}", order.txid)
-                    else     log.warn("REAPER: cancel PATCH não-2xx txid={}", order.txid)
+            // 2) tenta cancelar cobrança
+            runCatching {
+                when (order.paymentMethod) {
+                    "pix" -> order.txid?.let { pixClient.cancel(it) }
+                    "card" -> order.chargeId?.let { cardClient.cancel(it) }
+                    else -> null
                 }
-                .onFailure { e ->
-                    log.warn("REAPER: falha ao cancelar cobrança txid={}: {}", order.txid, e.message)
-                }
+            }.onSuccess { ok ->
+                if (ok == true) log.info("REAPER: cobrança cancelada orderId={}", order.id)
+                else log.warn("REAPER: cancel falhou ou não suportado orderId={}", order.id)
+            }.onFailure { e ->
+                log.warn("REAPER: falha ao cancelar cobrança orderId={}: {}", order.id, e.message)
+            }
 
-            // 3) marca pedido como expirado
+            // 3) marca como expirado
             order.status = OrderStatus.RESERVA_EXPIRADA
             order.reserveExpiresAt = null
             orderRepository.save(order)
-            log.info("RESERVA EXPIRADA: orderId={} liberada", order.id)
+            log.info("Reserva expirada: orderId={} liberada", order.id)
         }
-        log.info("REAPER: pedidos expirados processados={}, unidades devolvidas={}", expired.size, released)
+
+        log.info("REAPER: pedidos expirados={}, unidades devolvidas={}", expired.size, released)
     }
 }

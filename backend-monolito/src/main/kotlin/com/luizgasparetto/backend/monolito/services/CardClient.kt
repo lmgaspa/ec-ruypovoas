@@ -49,4 +49,22 @@ class CardClient(
         log.info("CARD STATUS: chargeId={}, status={}", chargeId, status)
         return status
     }
+
+    /**
+     * 🔹 Cancela a cobrança de cartão no provedor
+     */
+    fun cancel(chargeId: String): Boolean {
+        val url = "${baseUrl()}/v1/charge/card/$chargeId"
+        val token = auth.getAccessToken()
+        val headers = HttpHeaders().apply {
+            contentType = MediaType.APPLICATION_JSON
+            setBearerAuth(token)
+        }
+        // A maioria dos PSPs exige PATCH com status = "CANCELED" ou equivalente
+        val body = mapOf("status" to "CANCELED")
+        val res = rt.exchange(url, HttpMethod.PATCH, HttpEntity(body, headers), String::class.java)
+        val ok = res.statusCode.is2xxSuccessful
+        log.info("CARD CANCEL: chargeId={}, ok={}, httpStatus={}", chargeId, ok, res.statusCode)
+        return ok
+    }
 }

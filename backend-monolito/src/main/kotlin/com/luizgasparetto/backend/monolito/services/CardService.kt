@@ -44,13 +44,13 @@ class CardService(
             "payment" to mapOf(
                 "credit_card" to mapOf(
                     "card_token" to cardToken,
-                    "installments" to installments
+                    "installments" to request.installments // 🔹 vem do frontend
                 )
             ),
             "items" to request.cartItems.map {
                 mapOf(
                     "name" to it.title,
-                    "value" to (it.price * 100).toInt(), // em centavos
+                    "value" to (it.price * 100).toInt(),
                     "amount" to it.quantity
                 )
             },

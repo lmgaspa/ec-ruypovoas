@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import type { CartItem } from "../context/CartTypes";
-import type { CheckoutFormData } from "../types/CheckoutTypes";
+import type { CartItem } from "../components/checkout/CheckoutFormView";
+import type { CheckoutFormData } from "../components/checkout/CheckoutFormView";
 import CheckoutFormView from "../components/checkout/CheckoutFormView";
 
 interface CheckoutFormProps {
@@ -17,7 +17,7 @@ interface CheckoutFormProps {
   onNavigateBack: () => void;
 }
 
-const CheckoutForm = (props: CheckoutFormProps) => {
+const CheckoutForm: React.FC<CheckoutFormProps> = (props) => {
   const navigate = useNavigate();
 
   const handlePixCheckout = () => {
@@ -26,54 +26,10 @@ const CheckoutForm = (props: CheckoutFormProps) => {
       return;
     }
 
-    const requiredFields: (keyof CheckoutFormData)[] = [
-      "firstName",
-      "lastName",
-      "cpf",
-      "cep",
-      "address",
-      "number",
-      "district",
-      "city",
-      "state",
-      "email",
-      "phone",
-    ];
-
-    const missingField = requiredFields.find(
-      (field) => String(props.form[field] ?? "").trim() === ""
-    );
-
-    if (missingField) {
-      alert("Por favor, preencha todos os campos obrigatórios.");
-      return;
-    }
-
-    const cpfDigits = props.form.cpf.replace(/\D/g, "");
-    const cepDigits = props.form.cep.replace(/\D/g, "");
-    const phoneDigits = props.form.phone.replace(/\D/g, "");
-
-    if (cpfDigits.length !== 11) {
-      alert("CPF inválido.");
-      return;
-    }
-    if (cepDigits.length !== 8) {
-      alert("CEP inválido.");
-      return;
-    }
-    if (phoneDigits.length !== 11 || phoneDigits[2] !== "9") {
-      alert("Celular inválido. Use o formato (xx)9xxxx-xxxx.");
-      return;
-    }
-
-    navigate("/pix", {
-      state: {
-        form: props.form,
-        cartItems: props.cartItems,
-        total: props.total,
-        shipping: props.shipping,
-      },
-    });
+    // salva para página Pix (se você tiver uma)
+    localStorage.setItem("checkoutForm", JSON.stringify(props.form));
+    localStorage.setItem("cart", JSON.stringify(props.cartItems));
+    navigate("/pagamento-pix");
   };
 
   const handleCardCheckout = () => {
@@ -82,13 +38,12 @@ const CheckoutForm = (props: CheckoutFormProps) => {
       return;
     }
 
-    // Validações mínimas antes de ir para a página de cartão
+    // Valida mínimas antes de ir para a página de cartão
     if (!props.form.firstName || !props.form.lastName || !props.form.email) {
       alert("Preencha os dados principais antes de continuar com cartão.");
       return;
     }
 
-    // Salva no localStorage para a próxima tela
     localStorage.setItem("checkoutForm", JSON.stringify(props.form));
     localStorage.setItem("cart", JSON.stringify(props.cartItems));
 

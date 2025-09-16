@@ -15,4 +15,6 @@ export interface CheckoutFormData {
   note: string;
   delivery: string;
   payment: string;
+  cardToken?: string;
+  installments?: number;
 }

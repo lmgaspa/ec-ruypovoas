@@ -1,10 +1,17 @@
 import React from "react";
 import { formatPrice } from "../../utils/formatPrice";
 import { formatCpf, formatCep } from "../../utils/masks";
-import type { CartItem } from "../../context/CartTypes";
 
-/** Shape do formulário (separado para tipar REQUIRED_FIELDS fora do componente) */
-interface CheckoutFormData {
+/** Tipos locais para não depender de imports externos aqui */
+export interface CartItem {
+  id: string;
+  title: string;
+  price: number;
+  quantity: number;
+  imageUrl: string;
+}
+
+export interface CheckoutFormData {
   firstName: string;
   lastName: string;
   cpf: string;
@@ -12,15 +19,15 @@ interface CheckoutFormData {
   cep: string;
   address: string;
   number: string;
-  complement: string; // opcional
+  complement: string;
   district: string;
   city: string;
   state: string;
   phone: string;
   email: string;
-  note: string; // opcional
+  note: string;
   delivery: string;
-  payment: string;
+  payment: string; // "pix" | "card" | ""
 }
 
 interface CheckoutFormViewProps {
@@ -29,7 +36,9 @@ interface CheckoutFormViewProps {
   shipping: number;
   form: CheckoutFormData;
   handleChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => void;
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
@@ -38,7 +47,7 @@ interface CheckoutFormViewProps {
   onNavigateBack: () => void;
 }
 
-/** Campos obrigatórios (fora do componente para satisfazer react-hooks/exhaustive-deps) */
+/** Campos obrigatórios */
 const REQUIRED_FIELDS: (keyof CheckoutFormData)[] = [
   "firstName",
   "lastName",
@@ -54,41 +63,36 @@ const REQUIRED_FIELDS: (keyof CheckoutFormData)[] = [
   "payment",
 ];
 
-const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/; // 000.000.000-00
-const CEP_REGEX = /^\d{5}-\d{3}$/;               // 00000-000
-const PHONE_REGEX = /^\(\d{2}\)9\d{4}-\d{4}$/;   // (DD)90000-0000  (9 obrigatório)
+const CPF_REGEX = /^\d{3}\.\d{3}\.\d{3}-\d{2}$/;
+const CEP_REGEX = /^\d{5}-\d{3}$/;
+const PHONE_REGEX = /^\(\d{2}\)9\d{4}-\d{4}$/;
 
-/** Validação algorítmica de CPF (com dígitos verificadores) */
+/** Validação algorítmica de CPF */
 function isValidCpf(cpfMasked: string): boolean {
   const cpf = cpfMasked.replace(/\D/g, "");
   if (cpf.length !== 11) return false;
-  if (/^(\d)\1{10}$/.test(cpf)) return false; // rejeita todos dígitos iguais
-
+  if (/^(\d)\1{10}$/.test(cpf)) return false;
   const calcDV = (base: string, factorStart: number) => {
     let sum = 0;
-    for (let i = 0; i < base.length; i++) {
+    for (let i = 0; i < base.length; i++)
       sum += Number(base[i]) * (factorStart - i);
-    }
     const dv = (sum * 10) % 11;
     return dv === 10 ? 0 : dv;
   };
-
   const dv1 = calcDV(cpf.slice(0, 9), 10);
   if (dv1 !== Number(cpf[9])) return false;
-
   const dv2 = calcDV(cpf.slice(0, 10), 11);
   return dv2 === Number(cpf[10]);
 }
 
-/** Máscara estrita para telefone no formato (DD)90000-0000 */
+/** Máscara estrita (DD)90000-0000 */
 function formatPhoneStrict(value: string): string {
-  const digits = value.replace(/\D/g, "").slice(0, 11); // 2 DDD + 9 números
+  const digits = value.replace(/\D/g, "").slice(0, 11);
   const ddd = digits.slice(0, 2);
-  const rest = digits.slice(2); // até 9 dígitos
-
+  const rest = digits.slice(2);
   if (digits.length <= 2) return `(${ddd}`;
-  if (rest.length <= 5) return `(${ddd})${rest}`;               // (71)9, (71)9000, (71)90000
-  return `(${ddd})${rest.slice(0, 5)}-${rest.slice(5, 9)}`;     // (71)90000-0000
+  if (rest.length <= 5) return `(${ddd})${rest}`;
+  return `(${ddd})${rest.slice(0, 5)}-${rest.slice(5, 9)}`;
 }
 
 const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
@@ -103,27 +107,30 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   handleCardCheckout,
   onNavigateBack,
 }) => {
-  // Aplica máscaras antes de delegar ao handleChange do pai (sem usar "any")
   const handleMaskedChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
   ) => {
-    const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+    const target = e.target as
+      | HTMLInputElement
+      | HTMLTextAreaElement
+      | HTMLSelectElement;
     const { name, value } = target;
     let v = value;
-
-    if (name === "cpf") v = formatCpf(value);            // 000.000.000-00
-    else if (name === "cep") v = formatCep(value);       // 00000-000
-    else if (name === "phone") v = formatPhoneStrict(value); // (DD)90000-0000
-
+    if (name === "cpf") v = formatCpf(value);
+    else if (name === "cep") v = formatCep(value);
+    else if (name === "phone") v = formatPhoneStrict(value);
     if (v !== value) {
-      // atualiza o valor do elemento antes de propagar para o handler do pai
-      (target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement).value = v;
+      if ("value" in target) {
+        target.value = v;
+      }
     }
-    handleChange(e);
   };
 
   const missingFields = React.useMemo(
-    () => REQUIRED_FIELDS.filter((f) => String(form[f] ?? "").trim().length === 0),
+    () =>
+      REQUIRED_FIELDS.filter((f) => String(form[f] ?? "").trim().length === 0),
     [form]
   );
 
@@ -132,7 +139,6 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   const cepOk = CEP_REGEX.test(form.cep);
   const phoneOk = PHONE_REGEX.test(form.phone);
 
-  // Só libera se: sem faltantes, carrinho > 0, CPF (formato + DV) ok, CEP ok e Phone ok.
   const isFormValid =
     missingFields.length === 0 &&
     cartItems.length > 0 &&
@@ -184,13 +190,16 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               value={form.cpf}
               onChange={handleMaskedChange}
               placeholder="CPF (000.000.000-00) *"
-              className={`border p-2 col-span-2 ${cpfInvalid ? "border-red-500" : ""}`}
+              className={`border p-2 col-span-2 ${
+                cpfInvalid ? "border-red-500" : ""
+              }`}
               inputMode="numeric"
               aria-invalid={cpfInvalid}
             />
             {cpfInvalid && (
               <p className="text-xs text-red-600 col-span-2">
-                CPF inválido. Use o formato 000.000.000-00 (ex.: 044.094.825-80).
+                CPF inválido. Use o formato 000.000.000-00 (ex.:
+                044.094.825-80).
               </p>
             )}
 
@@ -201,7 +210,9 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               value={form.cep}
               onChange={handleMaskedChange}
               placeholder="CEP (00000-000) *"
-              className={`border p-2 col-span-2 ${cepInvalid ? "border-red-500" : ""}`}
+              className={`border p-2 col-span-2 ${
+                cepInvalid ? "border-red-500" : ""
+              }`}
               inputMode="numeric"
               aria-invalid={cepInvalid}
               autoComplete="postal-code"
@@ -266,14 +277,17 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               value={form.phone}
               onChange={handleMaskedChange}
               placeholder="Telefone (ex.: (71)90000-0000) *"
-              className={`border p-2 col-span-2 ${phoneInvalid ? "border-red-500" : ""}`}
+              className={`border p-2 col-span-2 ${
+                phoneInvalid ? "border-red-500" : ""
+              }`}
               inputMode="tel"
               aria-invalid={phoneInvalid}
               autoComplete="tel-national"
             />
             {phoneInvalid && (
               <p className="text-xs text-red-600 col-span-2">
-                Telefone inválido. Use o formato (DD)90000-0000 (ex.: (71)90000-0000).
+                Telefone inválido. Use o formato (DD)90000-0000 (ex.:
+                (71)90000-0000).
               </p>
             )}
 
@@ -305,14 +319,35 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           <h2 className="text-lg font-bold">SEU PEDIDO</h2>
 
           {cartItems.map((item) => (
-            <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-2">
-              <img src={item.imageUrl} alt={item.title} className="w-12 h-16 object-cover rounded shadow" />
+            <div
+              key={item.id}
+              className="flex items-center justify-between gap-4 border-b pb-2"
+            >
+              <img
+                src={item.imageUrl}
+                alt={item.title}
+                className="w-12 h-16 object-cover rounded shadow"
+              />
               <div className="flex-1">
-                <p className="text-sm font-semibold text-text-primary">{item.title}</p>
+                <p className="text-sm font-semibold text-text-primary">
+                  {item.title}
+                </p>
                 <div className="flex items-center gap-2 mt-1">
-                  <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
+                  <button
+                    type="button"
+                    className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300"
+                    onClick={() => updateQuantity(item.id, -1)}
+                  >
+                    -
+                  </button>
                   <span className="text-sm">{item.quantity}</span>
-                  <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
+                  <button
+                    type="button"
+                    className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300"
+                    onClick={() => updateQuantity(item.id, 1)}
+                  >
+                    +
+                  </button>
                   <button
                     type="button"
                     className="ml-2 text-red-500 text-xs hover:underline"
@@ -322,7 +357,9 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
                   </button>
                 </div>
               </div>
-              <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
+              <span className="text-sm font-medium">
+                {formatPrice(item.price * item.quantity)}
+              </span>
             </div>
           ))}
 
@@ -336,7 +373,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
             <span>{formatPrice(total)}</span>
           </div>
 
-          {/* ESCOLHA DO PAGAMENTO */}
+          {/* Forma de pagamento */}
           <div className="mt-6">
             <h3 className="text-md font-semibold mb-2">Forma de pagamento</h3>
             <select
@@ -349,15 +386,9 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               <option value="pix">Pix</option>
               <option value="card">Cartão de crédito</option>
             </select>
-
-            {!isFormValid && (
-              <p className="text-sm text-red-600 mt-2">
-                Preencha todos os campos obrigatórios. Formatos exigidos: CPF 000.000.000-00 (válido), CEP 00000-000, Telefone (DD)90000-0000.
-              </p>
-            )}
           </div>
 
-          {/* BOTÕES DE PAGAMENTO (bloqueados até validar) */}
+          {/* Botões */}
           {form.payment === "pix" && (
             <button
               onClick={handlePixCheckout}
@@ -365,7 +396,9 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               disabled={!isFormValid}
               aria-disabled={!isFormValid}
               className={`bg-green-600 text-white py-2 w-full mt-4 rounded transition ${
-                !isFormValid ? "opacity-50 cursor-not-allowed" : "hover:bg-green-500"
+                !isFormValid
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-green-500"
               }`}
             >
               Finalizar Pagamento por Pix
@@ -379,10 +412,12 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               disabled={!isFormValid}
               aria-disabled={!isFormValid}
               className={`bg-blue-600 text-white py-2 w-full mt-4 rounded transition ${
-                !isFormValid ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-500"
+                !isFormValid
+                  ? "opacity-50 cursor-not-allowed"
+                  : "hover:bg-blue-500"
               }`}
             >
-              Finalizar Pagamento com Cartão
+              Continuar para o Cartão
             </button>
           )}
         </div>

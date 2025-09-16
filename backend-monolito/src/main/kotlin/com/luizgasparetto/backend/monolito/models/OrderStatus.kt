@@ -6,4 +6,5 @@ enum class OrderStatus {
     CONFIRMADO,
     RESERVA_EXPIRADA,
     CANCELADO_ESTORNADO,
+    PAGO,
 }

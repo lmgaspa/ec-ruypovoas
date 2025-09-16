@@ -1,5 +1,6 @@
 package com.luizgasparetto.backend.monolito.models
 
+import com.fasterxml.jackson.annotation.JsonIgnore
 import jakarta.persistence.*
 import java.math.BigDecimal
 
@@ -19,13 +20,14 @@ data class OrderItem(
     @Column(nullable = false)
     val quantity: Int,
 
-    @Column(nullable = true)
-    val imageUrl: String? = null,
-
     @Column(nullable = false, precision = 10, scale = 2)
     val price: BigDecimal,
 
+    @Column(nullable = true)
+    val imageUrl: String? = null,
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "order_id", nullable = false)
+    @JsonIgnore
     var order: Order? = null
 )

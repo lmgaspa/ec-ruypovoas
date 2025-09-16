@@ -19,7 +19,7 @@ data class Order(
 
     @Column(nullable = false) var cpf: String,
     @Column(nullable = false) var number: String,
-    @Column(nullable = true) var complement: String? = null,
+    @Column(nullable = true)  var complement: String? = null,
     @Column(nullable = false) var district: String,
 
     @Column(nullable = false) val address: String,
@@ -31,11 +31,20 @@ data class Order(
     @Column(columnDefinition = "TEXT")
     var note: String? = null,
 
+    @Column(nullable = false)
+    var installments: Int? = 1,   // 🔹 Novo campo
+
     @Column(nullable = false, precision = 10, scale = 2) val total: BigDecimal,
     @Column(nullable = false, precision = 10, scale = 2) val shipping: BigDecimal,
 
     @Column(nullable = false)
     var paid: Boolean = false,
+
+    @Column(nullable = false, unique = true, length = 35)
+    var txid: String,
+
+    @Column(name = "charge_id", unique = true)
+    var chargeId: String? = null,
 
     @Column(name = "mailed_at")
     var mailedAt: OffsetDateTime? = null,
@@ -45,12 +54,6 @@ data class Order(
 
     @Column(columnDefinition = "TEXT")
     var qrCodeBase64: String? = null,
-
-    @Column(nullable = false, unique = true, length = 35)
-    var txid: String,
-
-    @Column(name = "charge_id", unique = true)
-    var chargeId: String? = null,
 
     // 🔹 Agora nullable para não quebrar pedidos antigos
     @Column(length = 16)

@@ -17,14 +17,15 @@ data class CheckoutRequest(
     val email: String,
     val note: String?,
     val payment: String, // "pix" | "card"
-    val paymentToken: String?, // 🔑 token gerado pela Efí
     val shipping: Double,
     val cartItems: List<CartItemDto>,
-    val total: Double,
 
     // ✅ usado apenas quando for cartão
-    val cardToken: String? = null,   // token seguro gerado pelo frontend
-    val installments: Int? = 1       // número de parcelas
+
+    // 🔹 Para cartão
+    val cardToken: String? = null, // 🔹 token do cartão
+    val paymentToken: String?,               // token gerado pelo Efí
+    val installments: Int? = 1               // número de parcelas (até 6 sem juros
 )
 
 // Itens do carrinho

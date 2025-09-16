@@ -6,8 +6,8 @@ export default function PedidoConfirmado() {
 
   const orderId = useMemo(() => params.get("orderId"), [params]);
   const name = useMemo(() => params.get("name"), [params]);
-  const payment = useMemo(() => params.get("payment"), [params]); // "pix" ou "card"
-  const paid = useMemo(() => params.get("paid") === "true", [params]); // só para cartão
+  const payment = useMemo(() => params.get("payment"), [params]); // "pix" | "card"
+  const paid = useMemo(() => params.get("paid") === "true", [params]); // só cartão
 
   const renderMessage = () => {
     if (payment === "pix") {
@@ -47,9 +47,7 @@ export default function PedidoConfirmado() {
       }
     }
 
-    return (
-      <h1 className="text-2xl font-semibold mb-2">Pedido registrado ✅</h1>
-    );
+    return <h1 className="text-2xl font-semibold mb-2">Pedido registrado ✅</h1>;
   };
 
   return (
