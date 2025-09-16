@@ -74,8 +74,7 @@ function isValidCpf(cpfMasked: string): boolean {
   if (/^(\d)\1{10}$/.test(cpf)) return false;
   const calcDV = (base: string, factorStart: number) => {
     let sum = 0;
-    for (let i = 0; i < base.length; i++)
-      sum += Number(base[i]) * (factorStart - i);
+    for (let i = 0; i < base.length; i++) sum += Number(base[i]) * (factorStart - i);
     const dv = (sum * 10) % 11;
     return dv === 10 ? 0 : dv;
   };
@@ -107,25 +106,30 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   handleCardCheckout,
   onNavigateBack,
 }) => {
+  /** 
+   * FIX: aplica a máscara E repassa para o estado controlado 
+   * (sem isso, o valor "volta" no próximo render e parece que não digita)
+   */
   const handleMaskedChange = (
     e: React.ChangeEvent<
       HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
     >
   ) => {
-    const target = e.target as
-      | HTMLInputElement
-      | HTMLTextAreaElement
-      | HTMLSelectElement;
+    const target = e.target as HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
     const { name, value } = target;
-    let v = value;
-    if (name === "cpf") v = formatCpf(value);
-    else if (name === "cep") v = formatCep(value);
-    else if (name === "phone") v = formatPhoneStrict(value);
-    if (v !== value) {
-      if ("value" in target) {
-        target.value = v;
-      }
+
+    let masked = value;
+    if (name === "cpf") masked = formatCpf(value);
+    else if (name === "cep") masked = formatCep(value);
+    else if (name === "phone") masked = formatPhoneStrict(value);
+
+    // Atualiza o valor visível do input
+    if ("value" in target && masked !== value) {
+      (target as HTMLInputElement).value = masked;
     }
+
+    // Propaga para o estado do formulário controlado
+    handleChange(e);
   };
 
   const missingFields = React.useMemo(
@@ -190,16 +194,13 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               value={form.cpf}
               onChange={handleMaskedChange}
               placeholder="CPF (000.000.000-00) *"
-              className={`border p-2 col-span-2 ${
-                cpfInvalid ? "border-red-500" : ""
-              }`}
+              className={`border p-2 col-span-2 ${cpfInvalid ? "border-red-500" : ""}`}
               inputMode="numeric"
               aria-invalid={cpfInvalid}
             />
             {cpfInvalid && (
               <p className="text-xs text-red-600 col-span-2">
-                CPF inválido. Use o formato 000.000.000-00 (ex.:
-                044.094.825-80).
+                CPF inválido. Use o formato 000.000.000-00 (ex.: 044.094.825-80).
               </p>
             )}
 
@@ -210,9 +211,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               value={form.cep}
               onChange={handleMaskedChange}
               placeholder="CEP (00000-000) *"
-              className={`border p-2 col-span-2 ${
-                cepInvalid ? "border-red-500" : ""
-              }`}
+              className={`border p-2 col-span-2 ${cepInvalid ? "border-red-500" : ""}`}
               inputMode="numeric"
               aria-invalid={cepInvalid}
               autoComplete="postal-code"
@@ -277,17 +276,14 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               value={form.phone}
               onChange={handleMaskedChange}
               placeholder="Telefone (ex.: (71)90000-0000) *"
-              className={`border p-2 col-span-2 ${
-                phoneInvalid ? "border-red-500" : ""
-              }`}
+              className={`border p-2 col-span-2 ${phoneInvalid ? "border-red-500" : ""}`}
               inputMode="tel"
               aria-invalid={phoneInvalid}
               autoComplete="tel-national"
             />
             {phoneInvalid && (
               <p className="text-xs text-red-600 col-span-2">
-                Telefone inválido. Use o formato (DD)90000-0000 (ex.:
-                (71)90000-0000).
+                Telefone inválido. Use o formato (DD)90000-0000 (ex.: (71)90000-0000).
               </p>
             )}
 
@@ -396,9 +392,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               disabled={!isFormValid}
               aria-disabled={!isFormValid}
               className={`bg-green-600 text-white py-2 w-full mt-4 rounded transition ${
-                !isFormValid
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-green-500"
+                !isFormValid ? "opacity-50 cursor-not-allowed" : "hover:bg-green-500"
               }`}
             >
               Finalizar Pagamento por Pix
@@ -412,9 +406,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
               disabled={!isFormValid}
               aria-disabled={!isFormValid}
               className={`bg-blue-600 text-white py-2 w-full mt-4 rounded transition ${
-                !isFormValid
-                  ? "opacity-50 cursor-not-allowed"
-                  : "hover:bg-blue-500"
+                !isFormValid ? "opacity-50 cursor-not-allowed" : "hover:bg-blue-500"
               }`}
             >
               Continuar para o Cartão
