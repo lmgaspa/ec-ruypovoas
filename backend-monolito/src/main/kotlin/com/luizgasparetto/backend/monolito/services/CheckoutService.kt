@@ -8,18 +8,16 @@ import com.luizgasparetto.backend.monolito.models.OrderItem
 import com.luizgasparetto.backend.monolito.models.OrderStatus
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.beans.factory.annotation.Value
-import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpMethod
-import org.springframework.http.MediaType
+import org.springframework.http.*
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.client.RestTemplate
-import org.springframework.beans.factory.annotation.Qualifier
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.OffsetDateTime
-import java.util.UUID
+import java.util.*
 
 @Service
 class CheckoutService(
@@ -37,39 +35,24 @@ class CheckoutService(
 ) {
     private val log = LoggerFactory.getLogger(CheckoutService::class.java)
 
-    // ---------- Helpers ----------
-    private fun newTxid(): String =
-        // 3 ("PED") + 32 (UUID sem hífen) = 35 (válido para a Efí)
-        "PED" + UUID.randomUUID().toString().replace("-", "").uppercase()
-
-    data class QrPayload(val qrCode: String, val qrCodeBase64: String)
-    data class CardChargeResult(val paid: Boolean, val chargeId: String?)
-
-    // ---------- Fluxo principal ----------
     fun processCheckout(request: CheckoutRequest): CheckoutResponse {
-        // valida estoque
         request.cartItems.forEach { item -> bookService.validateStock(item.id, item.quantity) }
 
         val totalAmount = calculateTotalAmount(request)
-        val txid = newTxid()
+        val txid = generateTxid() // ✅ agora com 26–35 chars
 
         val order = createOrderTx(request, totalAmount, txid)
         reserveItemsTx(order, reserveTtlSeconds)
 
         return when (request.payment.lowercase()) {
-            "pix" -> processPix(order, totalAmount, request, txid)
+            "pix"  -> processPix(order, totalAmount, request, txid)
             "card" -> processCard(order, totalAmount, request, txid)
-            else -> throw IllegalArgumentException("Método de pagamento inválido: ${request.payment}")
+            else   -> throw IllegalArgumentException("Método de pagamento inválido: ${request.payment}")
         }
     }
 
-    // ---------- PIX ----------
-    private fun processPix(
-        order: Order,
-        totalAmount: BigDecimal,
-        request: CheckoutRequest,
-        txid: String
-    ): CheckoutResponse {
+    // ------------------- PIX -------------------
+    private fun processPix(order: Order, totalAmount: BigDecimal, request: CheckoutRequest, txid: String): CheckoutResponse {
         val qr = try {
             createPixQr(totalAmount, request, txid)
         } catch (e: Exception) {
@@ -92,17 +75,11 @@ class CheckoutService(
         )
     }
 
-    // ---------- CARTÃO ----------
-    private fun processCard(
-        order: Order,
-        totalAmount: BigDecimal,
-        request: CheckoutRequest,
-        txid: String
-    ): CheckoutResponse {
+    // ------------------- CARTÃO -------------------
+    private fun processCard(order: Order, totalAmount: BigDecimal, request: CheckoutRequest, txid: String): CheckoutResponse {
         val cardResult = try {
             createCardCharge(totalAmount, request, txid)
         } catch (e: IllegalStateException) {
-            // recusado
             releaseReservationTx(order.id!!)
             runCatching {
                 emailService.sendClientCardDeclined(order)
@@ -115,12 +92,12 @@ class CheckoutService(
             order.paid = true
             order.status = OrderStatus.CONFIRMADO
             order.chargeId = cardResult.chargeId
+            order.reserveExpiresAt = null
             orderRepository.save(order)
 
             emailService.sendClientEmail(order)
             emailService.sendAuthorEmail(order)
         } else {
-            // aguardando confirmação / processamento
             order.chargeId = cardResult.chargeId
             orderRepository.save(order)
             cardWatcher.watch(cardResult.chargeId!!, requireNotNull(order.reserveExpiresAt).toInstant())
@@ -137,115 +114,67 @@ class CheckoutService(
         )
     }
 
-    // ---------- Chamadas aos provedores ----------
-    private fun createPixQr(
-        totalAmount: BigDecimal,
-        request: CheckoutRequest,
-        txid: String
-    ): QrPayload {
+    // ------------------- HELPERS -------------------
+    data class QrPayload(val qrCode: String, val qrCodeBase64: String)
+    data class CardChargeResult(val paid: Boolean, val chargeId: String?)
+
+    /** Gera txid 26–35 alfanum (requisito Efí) */
+    private fun generateTxid(): String {
+        val base = ("PED" +
+                java.lang.Long.toString(System.currentTimeMillis(), 36) +
+                UUID.randomUUID().toString().replace("-", "")
+                ).uppercase()
+
+        val trimmed = if (base.length > 35) base.substring(0, 35) else base
+        return if (trimmed.length >= 26) trimmed
+        else trimmed + UUID.randomUUID().toString().replace("-", "").take(26 - trimmed.length).uppercase()
+    }
+
+    private fun createPixQr(totalAmount: BigDecimal, request: CheckoutRequest, txid: String): QrPayload {
         val baseUrl = if (sandbox) "https://pix-h.api.efipay.com.br" else "https://pix.api.efipay.com.br"
         val token = efiAuthService.getAccessToken()
-
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
         }
 
         val cpfNum = request.cpf.replace(Regex("[^\\d]"), "").takeIf { it.isNotBlank() }
-        val cobrancaBody = buildMap<String, Any> {
+        val body = buildMap<String, Any> {
             put("calendario", mapOf("expiracao" to reserveTtlSeconds.toInt()))
-            put("valor", mapOf("original" to totalAmount.setScale(2).toPlainString()))
+            put("valor", mapOf("original" to totalAmount.setScale(2, RoundingMode.HALF_UP).toPlainString()))
             put("chave", chavePix)
             put("solicitacaoPagador", "Pedido $txid")
-            if (cpfNum != null) {
-                put(
-                    "devedor",
-                    mapOf("nome" to "${request.firstName} ${request.lastName}", "cpf" to cpfNum)
-                )
-            }
+            if (cpfNum != null) put("devedor", mapOf("nome" to "${request.firstName} ${request.lastName}", "cpf" to cpfNum))
         }
 
-        val cobrancaResp = restTemplate.exchange(
+        val cob = restTemplate.exchange(
             "$baseUrl/v2/cob/$txid",
             HttpMethod.PUT,
-            HttpEntity(cobrancaBody, headers),
+            HttpEntity(body, headers),
             String::class.java
         )
-        require(cobrancaResp.statusCode.is2xxSuccessful) { "Erro ao criar cobrança Pix (${cobrancaResp.statusCode})" }
+        require(cob.statusCode.is2xxSuccessful)
 
-        val locId = objectMapper.readTree(cobrancaResp.body).path("loc").path("id").asText()
+        val locId = objectMapper.readTree(cob.body).path("loc").path("id").asText()
         val qrResp = restTemplate.exchange(
             "$baseUrl/v2/loc/$locId/qrcode",
             HttpMethod.GET,
             HttpEntity<Void>(headers),
             String::class.java
         )
-        require(qrResp.statusCode.is2xxSuccessful) { "Erro ao obter QRCode Pix (${qrResp.statusCode})" }
+        require(qrResp.statusCode.is2xxSuccessful)
 
         val qrJson = objectMapper.readTree(qrResp.body)
-        return QrPayload(
-            qrCode = qrJson.path("qrcode").asText(),
-            qrCodeBase64 = qrJson.path("imagemQrcode").asText()
-        )
+        return QrPayload(qrJson.path("qrcode").asText(), qrJson.path("imagemQrcode").asText())
     }
 
-    private fun createCardCharge(
-        totalAmount: BigDecimal,
-        request: CheckoutRequest,
-        txid: String
-    ): CardChargeResult {
-        // ⚠️ domínio correto para cobrança por cartão
-        val baseUrl = if (sandbox) "https://cobrancas-h.api.efipay.com.br" else "https://cobrancas.api.efipay.com.br"
-        val token = efiAuthService.getAccessToken()
-
-        val headers = HttpHeaders().apply {
-            contentType = MediaType.APPLICATION_JSON
-            setBearerAuth(token)
-        }
-
-        val cardToken = request.cardToken ?: error("cardToken é obrigatório para pagamento com cartão")
-        val installments = request.installments ?: 1
-
-        val body = mapOf(
-            "payment" to mapOf(
-                "credit_card" to mapOf(
-                    "card_token" to cardToken,
-                    "installments" to installments
-                )
-            ),
-            "items" to request.cartItems.map {
-                mapOf(
-                    "name" to it.title,
-                    "value" to (it.price * 100).toInt(),
-                    "amount" to it.quantity
-                )
-            },
-            "metadata" to mapOf("txid" to txid),
-            "amount" to mapOf("value" to totalAmount.multiply(BigDecimal(100)).toInt())
-        )
-
-        val response = restTemplate.exchange(
-            "$baseUrl/v1/charge/card",
-            HttpMethod.POST,
-            HttpEntity(body, headers),
-            String::class.java
-        )
-        require(response.statusCode.is2xxSuccessful) {
-            "Falha ao criar cobrança cartão: ${response.statusCode}"
-        }
-
-        val json = objectMapper.readTree(response.body)
-        val status = json.path("status").asText().uppercase()
-        val chargeId = json.path("charge_id").asText()
-
-        return when (status) {
-            "PAID", "APPROVED" -> CardChargeResult(true, chargeId.takeIf { it.isNotBlank() })
-            "DECLINED", "FAILED" -> throw IllegalStateException("Pagamento recusado pelo emissor do cartão")
-            else -> CardChargeResult(false, chargeId.takeIf { it.isNotBlank() })
-        }
+    private fun createCardCharge(totalAmount: BigDecimal, request: CheckoutRequest, txid: String): CardChargeResult {
+        // delega para CardService (mesma regra de domínio/headers)
+        val r = cardService.createCardCharge(totalAmount, request, txid) // <- use se preferir centralizar
+        return CardChargeResult(r.paid, r.chargeId)
     }
 
-    // ---------- Transacionais ----------
+    // ------------------- TRANSACIONAIS -------------------
     @Transactional
     fun createOrderTx(request: CheckoutRequest, totalAmount: BigDecimal, txid: String): Order {
         val order = Order(
@@ -276,7 +205,7 @@ class CheckoutService(
                 bookId = it.id,
                 title = it.title,
                 quantity = it.quantity,
-                price = it.price.toBigDecimal(),
+                price = BigDecimal(it.price).setScale(2, RoundingMode.HALF_UP),
                 imageUrl = bookService.getImageUrl(it.id),
                 order = order
             )
@@ -314,7 +243,12 @@ class CheckoutService(
     }
 
     private fun calculateTotalAmount(request: CheckoutRequest): BigDecimal {
-        val totalBooks = request.cartItems.sumOf { it.price.toBigDecimal().multiply(BigDecimal(it.quantity)) }
+        val totalBooks = request.cartItems.fold(BigDecimal.ZERO) { acc, it ->
+            acc + BigDecimal(it.price).setScale(2, RoundingMode.HALF_UP) * BigDecimal(it.quantity)
+        }
         return totalBooks + request.shipping.toBigDecimal()
     }
+
+    // Injeção opcional se você quiser delegar a criação do cartão para CardService
+    private val cardService: CardService by lazy { CardService(efiAuthService, objectMapper, restTemplate, sandbox) }
 }
