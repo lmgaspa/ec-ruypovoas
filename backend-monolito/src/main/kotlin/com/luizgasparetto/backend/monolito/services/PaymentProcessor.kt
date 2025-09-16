@@ -1,3 +1,4 @@
+// src/main/kotlin/.../services/PaymentProcessor.kt
 package com.luizgasparetto.backend.monolito.services
 
 import com.luizgasparetto.backend.monolito.models.OrderStatus
@@ -9,13 +10,12 @@ import java.time.OffsetDateTime
 
 @Service
 class PaymentProcessor(
-    private val orderRepository: OrderRepository
+    private val orderRepository: OrderRepository,
+    private val events: OrderEventsPublisher,
+    private val emailService: EmailService            // << injete
 ) {
     private val log = LoggerFactory.getLogger(PaymentProcessor::class.java)
 
-    /**
-     * Marca um pedido como pago via PIX, se ainda não estiver.
-     */
     @Transactional
     fun markPaidIfNeededByTxid(txid: String, status: String?): Boolean {
         val order = orderRepository.findWithItemsByTxid(txid) ?: return false
@@ -26,15 +26,18 @@ class PaymentProcessor(
             order.paidAt = OffsetDateTime.now()
             order.status = OrderStatus.PAGO
             orderRepository.save(order)
-            log.info("Pedido pago via PIX: orderId={}, txid={}", order.id, txid)
+
+            events.publishPaid(requireNotNull(order.id))
+            runCatching {
+                emailService.sendClientEmail(order)
+                emailService.sendAuthorEmail(order)
+            }
+
             return true
         }
         return false
     }
 
-    /**
-     * Marca um pedido como pago via cartão, se ainda não estiver.
-     */
     @Transactional
     fun markPaidIfNeededByChargeId(chargeId: String, status: String?): Boolean {
         val order = orderRepository.findWithItemsByChargeId(chargeId) ?: return false
@@ -45,7 +48,13 @@ class PaymentProcessor(
             order.paidAt = OffsetDateTime.now()
             order.status = OrderStatus.PAGO
             orderRepository.save(order)
-            log.info("Pedido pago via cartão: orderId={}, chargeId={}", order.id, chargeId)
+
+            events.publishPaid(requireNotNull(order.id))
+            runCatching {
+                emailService.sendClientEmail(order)
+                emailService.sendAuthorEmail(order)
+            }
+
             return true
         }
         return false

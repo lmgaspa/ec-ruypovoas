@@ -124,7 +124,7 @@ export default function PixPaymentPage() {
             phone: form.phone,
             email: form.email,
             note: form.note,
-            payment: form.payment,
+            payment: "pix",             // força
             shipping: frete, // pode ser 0
             cartItems,
             total: totalProdutos,

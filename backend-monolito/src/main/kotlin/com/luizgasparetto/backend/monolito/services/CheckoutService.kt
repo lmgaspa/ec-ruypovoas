@@ -26,6 +26,7 @@ class CheckoutService(
     private val pixWatcher: PixWatcher,
     private val cardWatcher: CardWatcher,
     private val emailService: EmailService,
+    private val events: OrderEventsPublisher,   // << injete aqu
     @Qualifier("efiRestTemplate") private val restTemplate: RestTemplate,
     @Value("\${efi.pix.sandbox}") private val sandbox: Boolean,
     @Value("\${efi.pix.chave}") private val chavePix: String,
@@ -54,6 +55,7 @@ class CheckoutService(
         val qr = try {
             createPixQr(totalAmount, request, txid)
         } catch (e: Exception) {
+            log.error("Falha ao criar QR Pix txid={}, msg={}", txid, e.message, e)
             releaseReservationTx(order.id!!)
             throw e
         }
@@ -92,6 +94,7 @@ class CheckoutService(
             orderRepository.save(order)
             emailService.sendClientEmail(order)
             emailService.sendAuthorEmail(order)
+            events.publishPaid(requireNotNull(order.id)) // << publica
         } else {
             order.chargeId = cardResult.chargeId
             orderRepository.save(order)
