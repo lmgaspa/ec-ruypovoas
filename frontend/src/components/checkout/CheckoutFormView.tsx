@@ -1,3 +1,4 @@
+// src/components/checkout/CheckoutFormView.tsx
 import React from "react";
 import { formatPrice } from "../../utils/formatPrice";
 import type { CartItem } from "../../context/CartTypes";
@@ -29,7 +30,7 @@ interface CheckoutFormViewProps {
   ) => void;
   updateQuantity: (id: string, delta: number) => void;
   removeItem: (id: string) => void;
-  handleCheckout: () => void; // << mudou
+  handleCheckout: () => void;
   onNavigateBack: () => void;
 }
 
@@ -46,6 +47,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
 }) => (
   <div className="max-w-5xl mx-auto py-12 px-4">
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-6">
+      {/* Coluna esquerda: dados do cliente */}
       <div className="lg:col-span-2 space-y-6">
         <div className="mb-4">
           <button
@@ -63,7 +65,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           <input id="firstName" name="firstName" autoComplete="given-name" value={form.firstName} onChange={handleChange} placeholder="Nome" className="border p-2" />
           <input id="lastName" name="lastName" autoComplete="family-name" value={form.lastName} onChange={handleChange} placeholder="Sobrenome" className="border p-2" />
 
-          {/* CPF visível e bem identificado */}
+          {/* CPF */}
           <input id="cpf" name="cpf" autoComplete="on" inputMode="numeric" value={form.cpf} onChange={handleChange} placeholder="CPF" className="border p-2 col-span-2" />
 
           <input value="Brasil" disabled className="border p-2 col-span-2" />
@@ -78,9 +80,44 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           <input id="email" name="email" autoComplete="email" type="email" value={form.email} onChange={handleChange} placeholder="E-mail" className="border p-2 col-span-2" />
         </div>
 
-        {/* Pagamento: Pix ou Cartão (sem coletar dados aqui) */}
-        <div className="mt-4">
-          <h3 className="text-md font-semibold mb-2">FORMA DE PAGAMENTO</h3>
+        <div>
+          <h2 className="text-lg font-bold mt-6">INFORMAÇÕES ADICIONAIS</h2>
+          <textarea
+            id="note"
+            name="note"
+            value={form.note}
+            onChange={handleChange}
+            placeholder="Observações sobre seu pedido..."
+            className="border w-full p-2 h-24"
+          />
+        </div>
+      </div>
+
+      {/* Coluna direita: resumo e forma de pagamento */}
+      <div>
+        <h2 className="text-lg font-bold">SEU PEDIDO</h2>
+
+        {cartItems.map((item) => (
+          <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-2">
+            <img src={item.imageUrl} alt={item.title} className="w-12 h-16 object-cover rounded shadow" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-text-primary">{item.title}</p>
+              <div className="flex items-center gap-2 mt-1">
+                <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
+                <span className="text-sm">{item.quantity}</span>
+                <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
+                <button type="button" className="ml-2 text-red-500 text-xs hover:underline" onClick={() => removeItem(item.id)}>Remover</button>
+              </div>
+            </div>
+            <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
+          </div>
+        ))}
+
+        <div className="border-t my-3" />
+
+        {/* Forma de pagamento — AGORA AQUI */}
+        <div className="mb-4">
+          <h3 className="text-md font-semibold mb-2">Forma de pagamento</h3>
           <div className="flex items-center gap-6">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -105,39 +142,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
           </div>
         </div>
 
-        <div>
-          <h2 className="text-lg font-bold mt-6">INFORMAÇÕES ADICIONAIS</h2>
-          <textarea
-            id="note"
-            name="note"
-            value={form.note}
-            onChange={handleChange}
-            placeholder="Observações sobre seu pedido..."
-            className="border w-full p-2 h-24"
-          />
-        </div>
-      </div>
-
-      <div>
-        <h2 className="text-lg font-bold">SEU PEDIDO</h2>
-
-        {cartItems.map((item) => (
-          <div key={item.id} className="flex items-center justify-between gap-4 border-b pb-2">
-            <img src={item.imageUrl} alt={item.title} className="w-12 h-16 object-cover rounded shadow" />
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-text-primary">{item.title}</p>
-              <div className="flex items-center gap-2 mt-1">
-                <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, -1)}>-</button>
-                <span className="text-sm">{item.quantity}</span>
-                <button type="button" className="bg-gray-200 px-2 py-1 rounded hover:bg-gray-300" onClick={() => updateQuantity(item.id, 1)}>+</button>
-                <button type="button" className="ml-2 text-red-500 text-xs hover:underline" onClick={() => removeItem(item.id)}>Remover</button>
-              </div>
-            </div>
-            <span className="text-sm font-medium">{formatPrice(item.price * item.quantity)}</span>
-          </div>
-        ))}
-
-        <div className="flex justify-between mt-2">
+        <div className="flex justify-between">
           <span>Entrega</span>
           <span>{shipping > 0 ? formatPrice(shipping) : "---"}</span>
         </div>
