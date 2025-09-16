@@ -3,6 +3,7 @@ package com.luizgasparetto.backend.monolito.services
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import java.time.Instant
+import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -15,28 +16,35 @@ class PixWatcher(
     private val scheduler = Executors.newScheduledThreadPool(2)
 
     private fun isPaidStatus(status: String?): Boolean =
-        status != null && status.lowercase() in listOf("pago", "paid", "approved", "confirmed")
+        status != null && status.lowercase() in listOf(
+            "pago", "paid", "approved", "confirmed", "concluida"
+        )
 
-    private fun isDeclinedStatus(status: String?): Boolean =
-        status != null && status.lowercase() in listOf("cancelado", "canceled", "denied", "declined")
+    private fun isTerminalStatus(status: String?): Boolean =
+        status != null && status.lowercase() in listOf(
+            "concluida", "expirada", "removida_pelo_usuario_recebedor",
+            "cancelada", "canceled"
+        )
 
     fun watch(txid: String, expiresAt: Instant) {
-        log.info("PIX watcher agendado txid={}, expiresAt={}", txid, expiresAt)
+        log.info("PIX watcher iniciado txid={}, expiresAt={}", txid, expiresAt)
         scheduler.scheduleAtFixedRate({
             try {
                 val status = pixClient.status(txid)
                 log.debug("PIX polling txid={}, status={}", txid, status)
 
                 if (isPaidStatus(status)) {
-                    val applied = processor.markPaidIfNeededByTxid(txid, status)
-                    log.info("PIX watcher finalizado (pago) txid={}, applied={}", txid, applied)
-                    return@scheduleAtFixedRate
+                    processor.markPaidIfNeededByTxid(txid, status)
+                    log.info("Watcher PIX finalizado (pago) txid={}", txid)
+                    throw CancellationException()
                 }
 
-                if (isDeclinedStatus(status) || Instant.now().isAfter(expiresAt)) {
-                    log.info("PIX watcher encerrado (expirado/cancelado) txid={}, status={}", txid, status)
-                    return@scheduleAtFixedRate
+                if (Instant.now().isAfter(expiresAt) || isTerminalStatus(status)) {
+                    log.info("Watcher PIX encerrado (expirado/terminal) txid={}, status={}", txid, status)
+                    throw CancellationException()
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 log.warn("Erro no watcher PIX txid={}: {}", txid, e.message)
             }

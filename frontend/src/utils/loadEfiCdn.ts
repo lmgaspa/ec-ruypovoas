@@ -1,48 +1,39 @@
 // src/utils/loadEfiCdn.ts
-import type { CheckoutAPI } from "../types/efipay";
+import type { CheckoutAPI } from "./efi-global";
 
-const LOADED_ID = "efi-cdn-script";
-
-type LoadOpts = { sandbox?: boolean; payeeCode?: string };
-
-type Bootstrap = {
-  validForm: boolean;
-  processed: boolean;
-  done?: (checkout: CheckoutAPI) => void;
-  ready(fn: (checkout: CheckoutAPI) => void): void;
+type EfiWindow = Window & {
+  __efiCheckoutReady?: boolean;
+  __efiCheckout?: CheckoutAPI;
 };
 
-export function loadEfiCdn(options?: LoadOpts) {
-  if (typeof window === "undefined") return;
+/**
+ * Espera a SDK do Efí sinalizar que está pronta (flag __efiCheckoutReady)
+ * e devolve a API (checkout) tipada. Rejeita se estourar o timeout.
+ */
+export function ensureEfiSdkLoaded(
+  opts: { timeoutMs?: number } = {}
+): Promise<CheckoutAPI> {
+  const timeoutMs = opts.timeoutMs ?? 8000;
+  const w = window as EfiWindow;
 
-  const sandbox = options?.sandbox ?? false;
-  const payeeCode = options?.payeeCode ?? "cf1a4eb72fb74687e6a95a3da1bd027b";
-
-  if (!window.$gn) {
-    const bootstrap: Bootstrap = {
-      validForm: true,
-      processed: false,
-      done: undefined,
-      ready(fn) {
-        this.done = fn;
-      },
-    };
-    // castzinho para evitar a checagem de propriedades extras no literal
-    window.$gn = bootstrap as unknown as { ready(fn: (checkout: CheckoutAPI) => void): void };
+  // já está pronta
+  if (w.__efiCheckoutReady && w.__efiCheckout) {
+    return Promise.resolve(w.__efiCheckout);
   }
 
-  if (document.getElementById(LOADED_ID)) return;
+  return new Promise<CheckoutAPI>((resolve, reject) => {
+    const start = Date.now();
 
-  const host = sandbox
-    ? "https://cobrancas-h.api.efipay.com.br"
-    : "https://cobrancas.api.efipay.com.br";
-
-  const s = document.createElement("script");
-  s.type = "text/javascript";
-  s.async = false;
-  s.id = LOADED_ID;
-  const v = Math.floor(Math.random() * 1_000_000);
-  s.src = `${host}/v1/cdn/${payeeCode}/${v}`;
-  document.head.appendChild(s);
+    const id = window.setInterval(() => {
+      if (w.__efiCheckoutReady && w.__efiCheckout) {
+        clearInterval(id);
+        resolve(w.__efiCheckout);
+        return;
+      }
+      if (Date.now() - start > timeoutMs) {
+        clearInterval(id);
+        reject(new Error("Efí SDK não ficou pronta a tempo."));
+      }
+    }, 100);
+  });
 }
-  

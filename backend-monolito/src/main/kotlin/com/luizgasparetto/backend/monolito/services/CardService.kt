@@ -27,9 +27,13 @@ class CardService(
     data class CardChargeResult(val paid: Boolean, val chargeId: String?)
 
     private fun baseUrl(): String =
-        if (sandbox) "https://cobrancas-h.api.efipay.com.br" else "https://cobrancas.api.efipay.com.br"
+        if (sandbox) "https://sandbox.efi.com.br" else "https://api.efi.com.br"
 
-    fun createCardCharge(totalAmount: BigDecimal, request: CheckoutRequest, txid: String): CardChargeResult {
+    fun createCardCharge(
+        totalAmount: BigDecimal,
+        request: CheckoutRequest,
+        txid: String
+    ): CardChargeResult {
         val token = efiAuthService.getAccessToken()
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
@@ -67,8 +71,9 @@ class CardService(
             HttpEntity(body, headers),
             String::class.java
         )
-
-        require(resp.statusCode.is2xxSuccessful) { "Falha ao criar cobrança cartão: ${resp.statusCode}" }
+        require(resp.statusCode.is2xxSuccessful) {
+            "Falha ao criar cobrança cartão: ${resp.statusCode}"
+        }
 
         val json: JsonNode = objectMapper.readTree(resp.body)
         val status = json.path("status").asText("").uppercase()
@@ -79,7 +84,7 @@ class CardService(
         return when (status) {
             "PAID", "APPROVED" -> CardChargeResult(true, chargeId)
             "DECLINED", "FAILED", "CANCELED" -> error("Pagamento recusado pelo emissor do cartão")
-            else -> CardChargeResult(false, chargeId) // AUTHORIZED/PROCESSING/etc
+            else -> CardChargeResult(false, chargeId) // AUTHORIZED / PROCESSING...
         }
     }
 }
