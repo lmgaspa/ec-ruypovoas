@@ -1,6 +1,6 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import type { CartItem } from "../components/checkout/CheckoutFormView";
+import type { CartItem } from "../context/CartTypes";
 import type { CheckoutFormData } from "../components/checkout/CheckoutFormView";
 import CheckoutFormView from "../components/checkout/CheckoutFormView";
 
@@ -26,21 +26,19 @@ const CheckoutForm: React.FC<CheckoutFormProps> = (props) => {
       return;
     }
 
-    // salva para página Pix (se você tiver uma)
-    localStorage.setItem("checkoutForm", JSON.stringify(props.form));
-    localStorage.setItem("cart", JSON.stringify(props.cartItems));
-    navigate("/pagamento-pix");
+    navigate("/pix", {
+      state: {
+        form: props.form,
+        cartItems: props.cartItems,
+        total: props.total,
+        shipping: props.shipping,
+      },
+    });
   };
 
   const handleCardCheckout = () => {
     if (!props.cartItems.length) {
       alert("Seu carrinho está vazio.");
-      return;
-    }
-
-    // Valida mínimas antes de ir para a página de cartão
-    if (!props.form.firstName || !props.form.lastName || !props.form.email) {
-      alert("Preencha os dados principais antes de continuar com cartão.");
       return;
     }
 
