@@ -22,11 +22,8 @@ class CardClient(
     private val log = LoggerFactory.getLogger(CardClient::class.java)
 
     private fun baseUrl(): String =
-        if (props.sandbox) "https://sandbox.efi.com.br" else "https://api.efi.com.br"
+        if (props.sandbox) "https://cobrancas-h.api.efipay.com.br" else "https://cobrancas.api.efipay.com.br"
 
-    /**
-     * 🔹 Busca os detalhes da cobrança de cartão
-     */
     fun getCharge(chargeId: String): JsonNode {
         val url = "${baseUrl()}/v1/charge/card/$chargeId"
         val token = auth.getAccessToken()
@@ -34,15 +31,11 @@ class CardClient(
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
         }
-
         val res = rt.exchange(url, HttpMethod.GET, HttpEntity<Void>(headers), String::class.java)
         val body = res.body ?: "{}"
         return mapper.readTree(body)
     }
 
-    /**
-     * 🔹 Retorna apenas o status atual da cobrança
-     */
     fun status(chargeId: String): String? {
         val json = getCharge(chargeId)
         val status = json.path("status").asText(null)
@@ -50,9 +43,6 @@ class CardClient(
         return status
     }
 
-    /**
-     * 🔹 Cancela a cobrança de cartão no provedor
-     */
     fun cancel(chargeId: String): Boolean {
         val url = "${baseUrl()}/v1/charge/card/$chargeId"
         val token = auth.getAccessToken()
@@ -60,7 +50,6 @@ class CardClient(
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
         }
-        // A maioria dos PSPs exige PATCH com status = "CANCELED" ou equivalente
         val body = mapOf("status" to "CANCELED")
         val res = rt.exchange(url, HttpMethod.PATCH, HttpEntity(body, headers), String::class.java)
         val ok = res.statusCode.is2xxSuccessful
