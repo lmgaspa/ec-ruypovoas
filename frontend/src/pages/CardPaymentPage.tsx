@@ -1,7 +1,9 @@
+// src/pages/CardPaymentPage.tsx
 import { useNavigate } from "react-router-dom";
 import { useMemo, useState } from "react";
+import type { PaymentTokenResponse } from "../types/efipay";
 
-/** Tipos locais */
+/** Tipos locais (somente para esta página) */
 interface CartItem {
   id: string;
   title: string;
@@ -29,42 +31,14 @@ interface CheckoutFormData {
   shipping?: number;
 }
 
+type Brand = "visa" | "mastercard" | "amex";
 interface CardData {
   number: string;
   holderName: string;
   expirationMonth: string; // "MM"
   expirationYear: string;  // "AA"
-  cvv: string;             // 3 (Visa) / 4 (Amex)
-  brand: "visa" | "mastercard" | "amex";
-}
-
-interface PaymentTokenResponse {
-  payment_token: string;
-  card_mask: string;
-}
-interface CheckoutAPI {
-  getPaymentToken(
-    params: {
-      brand: string;
-      number: string;
-      cvv: string;
-      expiration_month: string;
-      expiration_year: string;
-      reuse: boolean;
-    },
-    callback: (
-      error: { error_description?: string } | null,
-      response: PaymentTokenResponse | null
-    ) => void
-  ): void;
-}
-
-declare global {
-  interface Window {
-    $gn: {
-      ready: (fn: (checkout: CheckoutAPI) => void) => void;
-    };
-  }
+  cvv: string;             // 3 (Visa/Master) / 4 (Amex)
+  brand: Brand;
 }
 
 const API_BASE =
@@ -72,7 +46,7 @@ const API_BASE =
   "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
 
 /* ---------- Helpers de máscara/validação ---------- */
-function formatCardNumber(value: string, brand: CardData["brand"]): string {
+function formatCardNumber(value: string, brand: Brand): string {
   const digits = value.replace(/\D/g, "");
   if (brand === "amex") {
     // 15: 4-6-5
@@ -84,10 +58,7 @@ function formatCardNumber(value: string, brand: CardData["brand"]): string {
       .trim();
   }
   // visa/master 16: 4-4-4-4
-  return digits
-    .slice(0, 16)
-    .replace(/(\d{4})(?=\d)/g, "$1 ")
-    .trim();
+  return digits.slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ").trim();
 }
 function formatMonthStrict(value: string): string {
   let d = value.replace(/\D/g, "").slice(0, 2);
@@ -103,14 +74,14 @@ function formatMonthStrict(value: string): string {
 function formatYearStrict(value: string): string {
   return value.replace(/\D/g, "").slice(0, 2);
 }
-function formatCvv(value: string, brand: CardData["brand"]): string {
+function formatCvv(value: string, brand: Brand): string {
   const max = brand === "amex" ? 4 : 3;
   return value.replace(/\D/g, "").slice(0, max);
 }
-function detectBrandFromDigits(digits: string): CardData["brand"] | null {
+function detectBrandFromDigits(digits: string): Brand | null {
   if (/^3[47]/.test(digits)) return "amex";
   if (/^4/.test(digits)) return "visa";
-  if (/^5[1-5]/.test(digits) || /^2(2[2-9]|[3-6]|7[01]|720)/.test(digits)) return "mastercard";
+  if (/^(5[1-5]|2(2[2-9]|[3-6]|7[01]|720))/.test(digits)) return "mastercard";
   return null;
 }
 function isValidLuhn(numDigits: string): boolean {
@@ -125,6 +96,10 @@ function isValidLuhn(numDigits: string): boolean {
     dbl = !dbl;
   }
   return sum % 10 === 0;
+}
+function perInstallmentFor(total: number, n: number): string {
+  const v = Math.round((total / n) * 100) / 100;
+  return v.toFixed(2);
 }
 /* ---------- Fim helpers ---------- */
 
@@ -143,7 +118,7 @@ export default function CardPaymentPage() {
   const shipping = Number(form?.shipping ?? 0);
   const total = cart.reduce((acc, i) => acc + i.price * i.quantity, 0) + shipping;
 
-  const [brand, setBrand] = useState<CardData["brand"]>("visa");
+  const [brand, setBrand] = useState<Brand>("visa");
   const [card, setCard] = useState<CardData>({
     number: "",
     holderName: "",
@@ -157,13 +132,20 @@ export default function CardPaymentPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Proteção: se não houver carrinho/total válido, volta ao checkout
+  if (!Array.isArray(cart) || cart.length === 0 || total <= 0) {
+    // Evita loop infinito se essa página for aberta direto sem contexto
+    // Você pode trocar por um link/CTA se preferir
+  }
+
   // masks
   const numberDigits = card.number.replace(/\D/g, "");
   const inferredBrand = detectBrandFromDigits(numberDigits);
-  const effectiveBrand = inferredBrand ?? brand; // detecta automaticamente quando possível
+  const effectiveBrand: Brand = inferredBrand ?? brand;
+  const cvvLen = effectiveBrand === "amex" ? 4 : 3;
 
   const onChangeBrand = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newBrand = e.target.value as CardData["brand"];
+    const newBrand = e.target.value as Brand;
     setBrand(newBrand);
     setCard((prev) => ({
       ...prev,
@@ -202,7 +184,6 @@ export default function CardPaymentPage() {
     Number(card.expirationMonth) >= 1 &&
     Number(card.expirationMonth) <= 12;
   const yearOk = /^\d{2}$/.test(card.expirationYear);
-  const cvvLen = effectiveBrand === "amex" ? 4 : 3;
   const cvvOk = new RegExp(`^\\d{${cvvLen}}$`).test(card.cvv);
 
   const canPay = !loading && luhnOk && holderOk && monthOk && yearOk && cvvOk && total > 0;
@@ -217,7 +198,12 @@ export default function CardPaymentPage() {
     setLoading(true);
     setErrorMsg(null);
 
-    // A Efí espera "brand" textual coerente com o tokenizador
+    if (!window.$gn) {
+      setErrorMsg("SDK de pagamentos não carregou ainda. Tente novamente em alguns segundos.");
+      setLoading(false);
+      return;
+    }
+
     const brandToSend =
       effectiveBrand === "visa"
         ? "visa"
@@ -254,8 +240,8 @@ export default function CardPaymentPage() {
               body: JSON.stringify({
                 ...form,
                 payment: "card",
-                cardToken: response.payment_token, // <<<<< backend espera 'cardToken'
-                installments,                      // <<<<< até 6 sem juros
+                cardToken: (response as PaymentTokenResponse).payment_token,
+                installments, // até 6 sem juros
                 cartItems: cart,
                 total,
                 shipping,
@@ -263,11 +249,7 @@ export default function CardPaymentPage() {
             });
 
             if (!res.ok) throw new Error(await res.text());
-            const data: {
-              message?: string;
-              orderId?: string;
-              paid?: boolean;
-            } = await res.json();
+            const data: { message?: string; orderId?: string; paid?: boolean } = await res.json();
 
             localStorage.removeItem("cart");
             navigate(
@@ -289,11 +271,7 @@ export default function CardPaymentPage() {
 
       {/* Bandeira */}
       <label className="block text-sm font-medium mb-1">Bandeira</label>
-      <select
-        value={brand}
-        onChange={onChangeBrand}
-        className="border p-2 w-full mb-4 rounded"
-      >
+      <select value={brand} onChange={onChangeBrand} className="border p-2 w-full mb-4 rounded">
         <option value="visa">Visa</option>
         <option value="mastercard">Mastercard</option>
         <option value="amex">American Express</option>
@@ -370,9 +348,7 @@ export default function CardPaymentPage() {
       </p>
 
       {/* Erro */}
-      {errorMsg && (
-        <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>
-      )}
+      {errorMsg && <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>}
 
       <button
         disabled={!canPay}
@@ -385,10 +361,4 @@ export default function CardPaymentPage() {
       </button>
     </div>
   );
-}
-
-/** helper para mostrar o valor por parcela com 2 casas */
-function perInstallmentFor(total: number, n: number): string {
-  const v = Math.round((total / n) * 100) / 100;
-  return v.toFixed(2);
 }
