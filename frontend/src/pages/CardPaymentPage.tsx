@@ -2,39 +2,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-/* ===================== Tipos da SDK Efí (mínimos) ===================== */
-type PaymentTokenResponse = {
-  payment_token: string;
-  card_mask?: string;
-};
+/* ===== Tipos mínimos da SDK Efí ===== */
+type PaymentTokenResponse = { payment_token: string; card_mask?: string };
 type PaymentTokenError = { error_description?: string };
-
 interface CheckoutAPI {
   getPaymentToken(
     params: {
       brand: string;
       number: string;
       cvv: string;
-      expiration_month: string; // "MM"
-      expiration_year: string;  // "YYYY"
+      expiration_month: string;
+      expiration_year: string;
       reuse: boolean;
     },
-    callback: (
-      error: PaymentTokenError | null,
-      response: PaymentTokenResponse | null
-    ) => void
+    cb: (err: PaymentTokenError | null, res: PaymentTokenResponse | null) => void
   ): void;
 }
-
 type EfiWindow = Window & {
   __efiCheckout?: CheckoutAPI;
   __efiCheckoutReady?: boolean;
-  $gn?: {
-    ready(fn: (checkout: CheckoutAPI) => void): void;
-  };
+  $gn?: { ready(fn: (checkout: CheckoutAPI) => void): void };
 };
 
-/* ===================== Loader da SDK (via index.html) ===================== */
+/* ===== Loader da SDK (script com payee_code no index.html) ===== */
 async function ensureEfiSdkLoaded(): Promise<CheckoutAPI> {
   const w = window as EfiWindow;
   if (w.__efiCheckoutReady && w.__efiCheckout) return w.__efiCheckout;
@@ -54,15 +44,11 @@ async function ensureEfiSdkLoaded(): Promise<CheckoutAPI> {
   });
 
   const checkout = (window as EfiWindow).__efiCheckout;
-  if (!checkout) {
-    throw new Error(
-      "SDK do Efí indisponível. Verifique o script com seu payee_code em index.html."
-    );
-  }
+  if (!checkout) throw new Error("SDK do Efí indisponível no navegador.");
   return checkout;
 }
 
-/* ===================== Tipos locais ===================== */
+/* ===== Tipos locais ===== */
 interface CartItem {
   id: string;
   title: string;
@@ -90,14 +76,15 @@ interface CheckoutFormData {
   shipping?: number;
 }
 
-type Brand = "visa" | "mastercard" | "amex";
+/** Agora com todas as bandeiras aceitas pela Efí */
+type Brand = "visa" | "mastercard" | "amex" | "elo" | "hipercard" | "diners";
 
-/* ===================== Config ===================== */
+/* ===== Config ===== */
 const API_BASE =
   import.meta.env.VITE_API_BASE ??
   "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
 
-/* ===================== Helpers ===================== */
+/* ===== Helpers ===== */
 function formatCardNumber(value: string, brand: Brand): string {
   const digits = value.replace(/\D/g, "");
   if (brand === "amex") {
@@ -110,8 +97,8 @@ function formatCardNumber(value: string, brand: Brand): string {
   }
   return digits.slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ").trim();
 }
-function formatMonthStrict(value: string): string {
-  let d = value.replace(/\D/g, "").slice(0, 2);
+function formatMonthStrict(v: string): string {
+  let d = v.replace(/\D/g, "").slice(0, 2);
   if (d.length === 1) {
     if (Number(d) > 1) d = `0${d}`;
   } else if (d.length === 2) {
@@ -121,8 +108,8 @@ function formatMonthStrict(value: string): string {
   }
   return d;
 }
-function formatYearStrict(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 2);
+function formatYearStrict(v: string): string {
+  return v.replace(/\D/g, "").slice(0, 2);
 }
 function toFourDigitYear(yy: string): string {
   const d = yy.replace(/\D/g, "");
@@ -130,21 +117,22 @@ function toFourDigitYear(yy: string): string {
   if (d.length === 2) return `20${d}`;
   return d;
 }
-function formatCvv(value: string, brand: Brand): string {
+function formatCvv(v: string, brand: Brand): string {
   const max = brand === "amex" ? 4 : 3;
-  return value.replace(/\D/g, "").slice(0, max);
+  return v.replace(/\D/g, "").slice(0, max);
 }
-function detectBrandFromDigits(digits: string): Brand | null {
-  if (/^3[47]/.test(digits)) return "amex";
-  if (/^4/.test(digits)) return "visa";
-  if (/^(5[1-5]|2(2[2-9]|[3-6]|7[01]|720))/.test(digits)) return "mastercard";
-  return null;
+/** Auto-detecção básica (Visa/Master/Amex). Outras ficam por seleção manual. */
+function detectBrandFromDigits(d: string): Brand | null {
+  if (/^3[47]/.test(d)) return "amex";
+  if (/^4/.test(d)) return "visa";
+  if (/^(5[1-5]|2(2[2-9]|[3-6]|7[01]|720))/.test(d)) return "mastercard";
+  return null; // elo/hipercard/diners ficam no select
 }
-function isValidLuhn(numDigits: string): boolean {
+function isValidLuhn(num: string): boolean {
   let sum = 0,
     dbl = false;
-  for (let i = numDigits.length - 1; i >= 0; i--) {
-    let n = Number(numDigits[i]);
+  for (let i = num.length - 1; i >= 0; i--) {
+    let n = Number(num[i]);
     if (dbl) {
       n *= 2;
       if (n > 9) n -= 9;
@@ -168,13 +156,13 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
-/* ===================== Página ===================== */
+/* ===== Página ===== */
 interface CardData {
   number: string;
   holderName: string;
-  expirationMonth: string; // "MM"
-  expirationYear: string;  // "AA" no input; enviaremos "YYYY"
-  cvv: string;             // 3/4
+  expirationMonth: string;
+  expirationYear: string; // "AA" no input; convertida p/ "YYYY"
+  cvv: string;
   brand: Brand;
 }
 
@@ -271,19 +259,14 @@ export default function CardPaymentPage() {
     try {
       const checkout: CheckoutAPI = await ensureEfiSdkLoaded();
 
-      const brandLower =
-        effectiveBrand === "visa"
-          ? "visa"
-          : effectiveBrand === "mastercard"
-          ? "mastercard"
-          : "amex";
-
+      const brandToSend = effectiveBrand; // já está em minúsculas e inclui elo/hipercard/diners
       const expYear4 = toFourDigitYear(card.expirationYear);
+
       const paramsBase = {
         number: numberDigits,
         cvv: card.cvv,
         expiration_month: card.expirationMonth,
-        expiration_year: expYear4, // <- 4 dígitos
+        expiration_year: expYear4,
         reuse: false,
       };
 
@@ -294,7 +277,7 @@ export default function CardPaymentPage() {
             async (error, response) => {
               try {
                 if (error) {
-                  // visibilidade do erro da SDK
+                  // depuração: mostra erro bruto da SDK
                   // eslint-disable-next-line no-console
                   console.error("EFI getPaymentToken error:", error);
                   reject(
@@ -305,7 +288,7 @@ export default function CardPaymentPage() {
                   return;
                 }
                 if (!response?.payment_token) {
-                  // resposta vazia — tenta brand em maiúscula uma vez
+                  // algumas integrações retornam {code:200,data:{}} em vez do token -> tenta uma vez em UPPERCASE
                   // eslint-disable-next-line no-console
                   console.error("EFI getPaymentToken empty response:", response);
                   if (!triedUpper) return tryGet(brandStr.toUpperCase(), true);
@@ -351,7 +334,7 @@ export default function CardPaymentPage() {
           );
         };
 
-        tryGet(brandLower);
+        tryGet(brandToSend);
       });
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Falha no pagamento.");
@@ -364,13 +347,15 @@ export default function CardPaymentPage() {
 
   return (
     <div className="max-w-md mx-auto p-6">
-      <h2 className="text-xl font-semibold mb-4">Pagamento com Cartão</h2>
-
+      <h2 className="text-xl font-semibold mb-4 text-center">Pagamento com Cartão</h2>
       <label className="block text-sm font-medium mb-1">Bandeira</label>
       <select value={brand} onChange={onChangeBrand} className="border p-2 w-full mb-4 rounded">
         <option value="visa">Visa</option>
         <option value="mastercard">Mastercard</option>
         <option value="amex">American Express</option>
+        <option value="elo">Elo</option>
+        <option value="hipercard">Hipercard</option>
+        <option value="diners">Diners</option>
       </select>
 
       <input
@@ -438,9 +423,7 @@ export default function CardPaymentPage() {
         {installments}x de R$ {perInstallment.toFixed(2)} (total R$ {total.toFixed(2)}) — sem juros
       </p>
 
-      {errorMsg && (
-        <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>
-      )}
+      {errorMsg && <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>}
 
       <button
         disabled={!canPay}
