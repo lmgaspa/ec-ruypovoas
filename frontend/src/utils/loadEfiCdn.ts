@@ -7,33 +7,36 @@ type EfiWindow = Window & {
 };
 
 /**
- * Espera a SDK do Efí sinalizar que está pronta (flag __efiCheckoutReady)
- * e devolve a API (checkout) tipada. Rejeita se estourar o timeout.
+ * Espera a SDK do Efí sinalizar que está pronta (window.__efiCheckoutReady)
+ * e então retorna a instância CheckoutAPI (window.__efiCheckout).
  */
-export function ensureEfiSdkLoaded(
-  opts: { timeoutMs?: number } = {}
-): Promise<CheckoutAPI> {
-  const timeoutMs = opts.timeoutMs ?? 8000;
+export async function ensureEfiSdkLoaded(): Promise<CheckoutAPI> {
   const w = window as EfiWindow;
 
-  // já está pronta
   if (w.__efiCheckoutReady && w.__efiCheckout) {
-    return Promise.resolve(w.__efiCheckout);
+    return w.__efiCheckout;
   }
 
-  return new Promise<CheckoutAPI>((resolve, reject) => {
-    const start = Date.now();
-
-    const id = window.setInterval(() => {
-      if (w.__efiCheckoutReady && w.__efiCheckout) {
-        clearInterval(id);
-        resolve(w.__efiCheckout);
-        return;
-      }
-      if (Date.now() - start > timeoutMs) {
-        clearInterval(id);
-        reject(new Error("Efí SDK não ficou pronta a tempo."));
+  await new Promise<void>((resolve) => {
+    const tick = setInterval(() => {
+      if ((window as EfiWindow).__efiCheckoutReady && (window as EfiWindow).__efiCheckout) {
+        clearInterval(tick);
+        resolve();
       }
     }, 100);
+
+    // “timeout” macio — evita travar caso o script seja bloqueado
+    setTimeout(() => {
+      clearInterval(tick);
+      resolve();
+    }, 8000);
   });
+
+  const checkout = (window as EfiWindow).__efiCheckout;
+  if (!checkout) {
+    throw new Error(
+      "SDK do Efí indisponível. Verifique o script com seu payee_code em index.html."
+    );
+  }
+  return checkout;
 }

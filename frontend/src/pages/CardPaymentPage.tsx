@@ -37,11 +37,10 @@ const API_BASE =
   import.meta.env.VITE_API_BASE ??
   "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
 
-/* ---------- Helpers de máscara/validação ---------- */
+/* ---------- Helpers ---------- */
 function formatCardNumber(value: string, brand: Brand): string {
   const digits = value.replace(/\D/g, "");
   if (brand === "amex") {
-    // 15: 4-6-5
     const d = digits.slice(0, 15);
     return d
       .replace(/^(\d{1,4})(\d{1,6})?(\d{1,5})?$/, (_, a, b, c) =>
@@ -49,7 +48,6 @@ function formatCardNumber(value: string, brand: Brand): string {
       )
       .trim();
   }
-  // visa/master 16: 4-4-4-4
   return digits.slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ").trim();
 }
 function formatMonthStrict(value: string): string {
@@ -110,17 +108,14 @@ interface CardData {
   holderName: string;
   expirationMonth: string; // "MM"
   expirationYear: string; // "AA"
-  cvv: string; // 3 (Visa/Master) / 4 (Amex)
+  cvv: string; // 3/4
   brand: Brand;
 }
 
 export default function CardPaymentPage() {
   const navigate = useNavigate();
 
-  const cart: CartItem[] = useMemo(
-    () => readJson<CartItem[]>("cart", []),
-    []
-  );
+  const cart: CartItem[] = useMemo(() => readJson<CartItem[]>("cart", []), []);
   const form: CheckoutFormData = useMemo(
     () => readJson<CheckoutFormData>("checkoutForm", {} as CheckoutFormData),
     []
@@ -130,7 +125,6 @@ export default function CardPaymentPage() {
   const subtotal = cart.reduce((acc, i) => acc + i.price * i.quantity, 0);
   const total = subtotal + shipping;
 
-  // Se a página for aberta direto, volta ao checkout
   useEffect(() => {
     if (!Array.isArray(cart) || cart.length === 0 || total <= 0) {
       navigate("/checkout");
@@ -147,11 +141,10 @@ export default function CardPaymentPage() {
     brand: "visa",
   });
 
-  const [installments, setInstallments] = useState<number>(1); // 1..6 sem juros
+  const [installments, setInstallments] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // masks
   const numberDigits = card.number.replace(/\D/g, "");
   const inferredBrand = detectBrandFromDigits(numberDigits);
   const effectiveBrand: Brand = inferredBrand ?? brand;
@@ -185,12 +178,10 @@ export default function CardPaymentPage() {
     setCard((prev) => ({ ...prev, cvv: formatCvv(e.target.value, b) }));
   };
 
-  // validações
-  const digits = numberDigits;
   const lenOk =
-    (effectiveBrand === "amex" && digits.length === 15) ||
-    (effectiveBrand !== "amex" && digits.length === 16);
-  const luhnOk = lenOk && isValidLuhn(digits);
+    (effectiveBrand === "amex" && numberDigits.length === 15) ||
+    (effectiveBrand !== "amex" && numberDigits.length === 16);
+  const luhnOk = lenOk && isValidLuhn(numberDigits);
   const holderOk = card.holderName.trim().length > 0;
   const monthOk =
     /^\d{2}$/.test(card.expirationMonth) &&
@@ -212,10 +203,8 @@ export default function CardPaymentPage() {
     setErrorMsg(null);
 
     try {
-      // 1) Garante SDK Efí pronta
       const checkout: CheckoutAPI = await ensureEfiSdkLoaded();
 
-      // 2) Mapeia brand para formato aceito pela SDK
       const brandToSend: Brand =
         effectiveBrand === "visa"
           ? "visa"
@@ -223,12 +212,11 @@ export default function CardPaymentPage() {
           ? "mastercard"
           : "amex";
 
-      // 3) Gera o payment_token
       await new Promise<void>((resolve, reject) => {
         checkout.getPaymentToken(
           {
             brand: brandToSend,
-            number: digits,
+            number: numberDigits,
             cvv: card.cvv,
             expiration_month: card.expirationMonth,
             expiration_year: card.expirationYear,
@@ -245,7 +233,6 @@ export default function CardPaymentPage() {
                 return;
               }
 
-              // 4) Chama o backend para efetivar a cobrança
               const res = await fetch(`${API_BASE}/api/checkout`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -253,7 +240,7 @@ export default function CardPaymentPage() {
                   ...form,
                   payment: "card",
                   cardToken: (response as PaymentTokenResponse).payment_token,
-                  installments, // até 6 sem juros
+                  installments,
                   cartItems: cart,
                   total,
                   shipping,
@@ -272,7 +259,6 @@ export default function CardPaymentPage() {
                 paid?: boolean;
               } = await res.json();
 
-              // 5) Limpa carrinho e segue para a confirmação
               localStorage.removeItem("cart");
               navigate(
                 `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${
@@ -288,6 +274,9 @@ export default function CardPaymentPage() {
       });
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Falha no pagamento.");
+      // ajuda no debug local:
+      // eslint-disable-next-line no-console
+      console.error(e);
     } finally {
       setLoading(false);
     }
@@ -297,7 +286,6 @@ export default function CardPaymentPage() {
     <div className="max-w-md mx-auto p-6">
       <h2 className="text-xl font-semibold mb-4">Pagamento com Cartão</h2>
 
-      {/* Bandeira */}
       <label className="block text-sm font-medium mb-1">Bandeira</label>
       <select value={brand} onChange={onChangeBrand} className="border p-2 w-full mb-4 rounded">
         <option value="visa">Visa</option>
@@ -305,7 +293,6 @@ export default function CardPaymentPage() {
         <option value="amex">American Express</option>
       </select>
 
-      {/* Número */}
       <input
         value={card.number}
         onChange={onChangeNumber}
@@ -319,7 +306,6 @@ export default function CardPaymentPage() {
         autoComplete="cc-number"
       />
 
-      {/* Nome */}
       <input
         value={card.holderName}
         onChange={onChangeHolder}
@@ -328,7 +314,6 @@ export default function CardPaymentPage() {
         autoComplete="cc-name"
       />
 
-      {/* MM / AA */}
       <div className="flex gap-2">
         <input
           value={card.expirationMonth}
@@ -348,7 +333,6 @@ export default function CardPaymentPage() {
         />
       </div>
 
-      {/* CVV */}
       <input
         value={card.cvv}
         onChange={onChangeCvv}
@@ -358,7 +342,6 @@ export default function CardPaymentPage() {
         autoComplete="cc-csc"
       />
 
-      {/* Parcelas sem juros */}
       <label className="block text-sm font-medium mb-1">Parcelas (sem juros)</label>
       <select
         className="border p-2 w-full rounded mb-2"
@@ -375,8 +358,11 @@ export default function CardPaymentPage() {
         {installments}x de R$ {perInstallment.toFixed(2)} (total R$ {total.toFixed(2)}) — sem juros
       </p>
 
-      {/* Erro */}
-      {errorMsg && <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>}
+      {errorMsg && (
+        <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">
+          {errorMsg}
+        </div>
+      )}
 
       <button
         disabled={!canPay}

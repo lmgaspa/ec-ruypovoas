@@ -1,7 +1,7 @@
 package com.luizgasparetto.backend.monolito.repositories
 
-import com.luizgasparetto.backend.monolito.models.Order
-import com.luizgasparetto.backend.monolito.models.OrderStatus
+import com.luizgasparetto.backend.monolito.models.order.Order
+import com.luizgasparetto.backend.monolito.models.order.OrderStatus
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
@@ -18,7 +18,6 @@ interface OrderRepository : JpaRepository<Order, Long> {
     @EntityGraph(attributePaths = ["items"])
     fun findWithItemsByChargeId(chargeId: String): Order?
 
-    // ✅ Novo método para suportar releaseReservationTx e PaymentController
     @EntityGraph(attributePaths = ["items"])
     fun findWithItemsById(id: Long): Order?
 
