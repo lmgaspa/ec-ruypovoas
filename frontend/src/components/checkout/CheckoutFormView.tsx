@@ -43,7 +43,7 @@ const CheckoutFormView: React.FC<CheckoutFormViewProps> = ({
   updateQuantity,
   removeItem,
   handleCheckout,
-  onNavigateBack,
+  onNavigateBack, 
 }) => (
   <div className="max-w-5xl mx-auto px-4 pt-2 pb-10">
     {" "}
