@@ -2,24 +2,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-/* ---------- Tipos e helper da SDK Efí (inline) ---------- */
-type Brand = "visa" | "mastercard" | "amex";
-
-interface PaymentTokenResponse {
+/* ===================== Tipos da SDK Efí (mínimos) ===================== */
+type PaymentTokenResponse = {
   payment_token: string;
   card_mask?: string;
-}
-interface PaymentTokenError {
-  error_description?: string;
-}
+};
+type PaymentTokenError = { error_description?: string };
+
 interface CheckoutAPI {
   getPaymentToken(
     params: {
       brand: string;
       number: string;
       cvv: string;
-      expiration_month: string;
-      expiration_year: string;
+      expiration_month: string; // "MM"
+      expiration_year: string;  // "YYYY"
       reuse: boolean;
     },
     callback: (
@@ -28,40 +25,44 @@ interface CheckoutAPI {
     ) => void
   ): void;
 }
-declare global {
-  interface Window {
-    __efiCheckout?: CheckoutAPI;
-    __efiCheckoutReady?: boolean;
-    $gn?: { ready(fn: (checkout: CheckoutAPI) => void): void };
-  }
-}
 
-/** Espera a SDK do Efí (exposta no index.html) estar pronta e retorna a API. */
+type EfiWindow = Window & {
+  __efiCheckout?: CheckoutAPI;
+  __efiCheckoutReady?: boolean;
+  $gn?: {
+    ready(fn: (checkout: CheckoutAPI) => void): void;
+  };
+};
+
+/* ===================== Loader da SDK (via index.html) ===================== */
 async function ensureEfiSdkLoaded(): Promise<CheckoutAPI> {
-  if (window.__efiCheckoutReady && window.__efiCheckout) return window.__efiCheckout;
+  const w = window as EfiWindow;
+  if (w.__efiCheckoutReady && w.__efiCheckout) return w.__efiCheckout;
 
   await new Promise<void>((resolve) => {
     const tick = setInterval(() => {
-      if (window.__efiCheckoutReady && window.__efiCheckout) {
+      const ww = window as EfiWindow;
+      if (ww.__efiCheckoutReady && ww.__efiCheckout) {
         clearInterval(tick);
         resolve();
       }
     }, 100);
-
-    // timeout "suave" para não travar — 8s
     setTimeout(() => {
       clearInterval(tick);
       resolve();
     }, 8000);
   });
 
-  const api = window.__efiCheckout;
-  if (!api) throw new Error("SDK do Efí indisponível. Verifique o script no index.html.");
-  return api;
+  const checkout = (window as EfiWindow).__efiCheckout;
+  if (!checkout) {
+    throw new Error(
+      "SDK do Efí indisponível. Verifique o script com seu payee_code em index.html."
+    );
+  }
+  return checkout;
 }
-/* ---------- Fim helper Efí ---------- */
 
-/** Tipos locais */
+/* ===================== Tipos locais ===================== */
 interface CartItem {
   id: string;
   title: string;
@@ -89,11 +90,14 @@ interface CheckoutFormData {
   shipping?: number;
 }
 
+type Brand = "visa" | "mastercard" | "amex";
+
+/* ===================== Config ===================== */
 const API_BASE =
   import.meta.env.VITE_API_BASE ??
   "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
 
-/* ---------- Helpers ---------- */
+/* ===================== Helpers ===================== */
 function formatCardNumber(value: string, brand: Brand): string {
   const digits = value.replace(/\D/g, "");
   if (brand === "amex") {
@@ -119,6 +123,12 @@ function formatMonthStrict(value: string): string {
 }
 function formatYearStrict(value: string): string {
   return value.replace(/\D/g, "").slice(0, 2);
+}
+function toFourDigitYear(yy: string): string {
+  const d = yy.replace(/\D/g, "");
+  if (d.length === 4) return d;
+  if (d.length === 2) return `20${d}`;
+  return d;
 }
 function formatCvv(value: string, brand: Brand): string {
   const max = brand === "amex" ? 4 : 3;
@@ -157,14 +167,14 @@ function readJson<T>(key: string, fallback: T): T {
     return fallback;
   }
 }
-/* ---------- Fim helpers ---------- */
 
+/* ===================== Página ===================== */
 interface CardData {
   number: string;
   holderName: string;
   expirationMonth: string; // "MM"
-  expirationYear: string; // "AA"
-  cvv: string; // 3/4
+  expirationYear: string;  // "AA" no input; enviaremos "YYYY"
+  cvv: string;             // 3/4
   brand: Brand;
 }
 
@@ -259,78 +269,89 @@ export default function CardPaymentPage() {
     setErrorMsg(null);
 
     try {
-      const checkout = await ensureEfiSdkLoaded();
+      const checkout: CheckoutAPI = await ensureEfiSdkLoaded();
 
-      const brandToSend: Brand =
+      const brandLower =
         effectiveBrand === "visa"
           ? "visa"
           : effectiveBrand === "mastercard"
           ? "mastercard"
           : "amex";
 
+      const expYear4 = toFourDigitYear(card.expirationYear);
+      const paramsBase = {
+        number: numberDigits,
+        cvv: card.cvv,
+        expiration_month: card.expirationMonth,
+        expiration_year: expYear4, // <- 4 dígitos
+        reuse: false,
+      };
+
       await new Promise<void>((resolve, reject) => {
-        checkout.getPaymentToken(
-          {
-            brand: brandToSend,
-            number: numberDigits,
-            cvv: card.cvv,
-            expiration_month: card.expirationMonth,
-            expiration_year: card.expirationYear,
-            reuse: false,
-          },
-          async (error, response) => {
-            try {
-              if (error || !response?.payment_token) {
-                 console.error("EFI getPaymentToken error:", error);
-                reject(
-                  new Error(
-                    error?.error_description ?? "Erro ao gerar token de pagamento."
-                  )
+        const tryGet = (brandStr: string, triedUpper = false) => {
+          checkout.getPaymentToken(
+            { brand: brandStr, ...paramsBase },
+            async (error, response) => {
+              try {
+                if (error) {
+                  // visibilidade do erro da SDK
+                  // eslint-disable-next-line no-console
+                  console.error("EFI getPaymentToken error:", error);
+                  reject(
+                    new Error(
+                      error?.error_description ?? "Erro ao gerar token de pagamento."
+                    )
+                  );
+                  return;
+                }
+                if (!response?.payment_token) {
+                  // resposta vazia — tenta brand em maiúscula uma vez
+                  // eslint-disable-next-line no-console
+                  console.error("EFI getPaymentToken empty response:", response);
+                  if (!triedUpper) return tryGet(brandStr.toUpperCase(), true);
+                  reject(new Error("Erro ao gerar token de pagamento."));
+                  return;
+                }
+
+                const token = response.payment_token;
+
+                const res = await fetch(`${API_BASE}/api/checkout/card`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    ...form,
+                    payment: "card",
+                    paymentToken: token,
+                    installments,
+                    cartItems: cart,
+                    shipping,
+                  }),
+                });
+
+                if (!res.ok) {
+                  const txt = await res.text();
+                  reject(new Error(txt || `Erro HTTP ${res.status}`));
+                  return;
+                }
+
+                const data: { message?: string; orderId?: string; paid?: boolean } =
+                  await res.json();
+
+                localStorage.removeItem("cart");
+                navigate(
+                  `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${
+                    data.paid ? "true" : "false"
+                  }`
                 );
-                return;
+                resolve();
+              } catch (e) {
+                reject(e instanceof Error ? e : new Error("Erro inesperado."));
               }
-
-              // Envia para o endpoint de CARTÃO
-              const res = await fetch(`${API_BASE}/api/checkout/card`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  ...form,
-                  payment: "card",
-                  paymentToken: (response as PaymentTokenResponse).payment_token,
-                  installments,
-                  cartItems: cart,
-                  total,
-                  shipping,
-                }),
-              });
-
-              if (!res.ok) {
-                const txt = await res.text();
-                reject(new Error(txt || `Erro HTTP ${res.status}`));
-                return;
-              }
-
-              const data: {
-                message?: string;
-                orderId?: string;
-                status?: string;
-                success?: boolean;
-                paid?: boolean;
-              } = await res.json();
-
-              localStorage.removeItem("cart");
-              navigate(
-                `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${
-                  data.paid ? "true" : "false"
-                }`
-              );
-              resolve();
-            } catch (e) {
-              reject(e instanceof Error ? e : new Error("Erro inesperado."));
             }
-          }
-        );
+          );
+        };
+
+        tryGet(brandLower);
       });
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Falha no pagamento.");
@@ -418,9 +439,7 @@ export default function CardPaymentPage() {
       </p>
 
       {errorMsg && (
-        <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">
-          {errorMsg}
-        </div>
+        <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">{errorMsg}</div>
       )}
 
       <button
