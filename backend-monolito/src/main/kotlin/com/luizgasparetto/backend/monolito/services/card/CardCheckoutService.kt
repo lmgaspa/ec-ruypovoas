@@ -21,8 +21,7 @@ class CardCheckoutService(
     private val bookService: BookService,
     private val cardService: CardService,
     private val processor: CardPaymentProcessor,
-    private val cardWatcher: CardWatcher?,                 // opcional (pode ser nulo se não declarado no contexto)
-    private val paymentProcessorLegacy: CardPaymentProcessor?  // (opcional) se ainda existir alguma referência antiga
+    private val cardWatcher: CardWatcher? = null                 // opcional (pode ser nulo se não declarado no contexto)
 ) {
     private val log = LoggerFactory.getLogger(CardCheckoutService::class.java)
     private val reserveTtlSeconds: Long = 900 // pode externalizar com @Value se preferir

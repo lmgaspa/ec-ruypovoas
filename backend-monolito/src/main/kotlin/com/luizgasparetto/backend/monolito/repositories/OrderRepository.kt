@@ -5,7 +5,6 @@ import com.luizgasparetto.backend.monolito.models.order.OrderStatus
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
-import org.springframework.data.repository.query.Param
 import java.time.OffsetDateTime
 
 interface OrderRepository : JpaRepository<Order, Long> {
@@ -22,8 +21,7 @@ interface OrderRepository : JpaRepository<Order, Long> {
     fun findWithItemsById(id: Long): Order?
 
     @EntityGraph(attributePaths = ["items"])
-    @Query(
-        """
+    @Query("""
         select distinct o
           from Order o
           left join o.items it
@@ -31,10 +29,6 @@ interface OrderRepository : JpaRepository<Order, Long> {
            and o.status = :status
            and o.reserveExpiresAt is not null
            and o.reserveExpiresAt < :now
-    """
-    )
-    fun findExpiredReservations(
-        @Param("now") now: OffsetDateTime,
-        @Param("status") status: OrderStatus
-    ): List<Order>
+    """)
+    fun findExpiredReservations(now: OffsetDateTime, status: OrderStatus): List<Order>
 }

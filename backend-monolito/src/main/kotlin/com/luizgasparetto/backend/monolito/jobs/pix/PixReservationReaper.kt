@@ -27,8 +27,9 @@ class PixReservationReaper(
 
         var released = 0
         expired.forEach { order ->
-            // ⚠️ Processa só pedidos de PIX (sem chargeId de cartão)
-            val isPix = order.txid?.isNotBlank() == true && (order.chargeId.isNullOrBlank())
+            // Somente PIX: sem chargeId (cartão) e não marcado explicitamente como "card"
+            val isPix = order.chargeId.isNullOrBlank() &&
+                    (order.paymentMethod?.equals("pix", ignoreCase = true) != false)
             if (!isPix) return@forEach
 
             // 1) devolve estoque
@@ -37,8 +38,8 @@ class PixReservationReaper(
                 released += item.quantity
             }
 
-            // 2) tenta cancelar a cobrança Pix (não derruba transação)
-            runCatching { pixClient.cancel(order.txid!!) }
+            // 2) tenta cancelar a cobrança Pix (não derruba a transação)
+            runCatching { pixClient.cancel(order.txid) }
                 .onSuccess { ok ->
                     if (ok) log.info("PIX-REAPER: cobrança cancelada txid={}", order.txid)
                     else     log.warn("PIX-REAPER: cancel PATCH não-2xx txid={}", order.txid)
