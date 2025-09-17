@@ -281,6 +281,7 @@ export default function CardPaymentPage() {
           async (error, response) => {
             try {
               if (error || !response?.payment_token) {
+                 console.error("EFI getPaymentToken error:", error);
                 reject(
                   new Error(
                     error?.error_description ?? "Erro ao gerar token de pagamento."
