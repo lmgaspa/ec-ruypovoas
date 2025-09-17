@@ -99,7 +99,7 @@ class PixCheckoutService(
             paid      = false,
             txid      = txid,
             items     = mutableListOf(),
-            status    = OrderStatus.CRIADO
+            status    = OrderStatus.NEW
         )
 
         order.items = request.cartItems.map {
@@ -122,7 +122,7 @@ class PixCheckoutService(
     @Transactional
     fun reserveItemsTx(order: Order, ttlSeconds: Long) {
         order.items.forEach { item -> bookService.reserveOrThrow(item.bookId, item.quantity) }
-        order.status = OrderStatus.RESERVADO
+        order.status = OrderStatus.WAITING
         order.reserveExpiresAt = OffsetDateTime.now().plusSeconds(ttlSeconds)
         orderRepository.save(order)
         log.info("RESERVA: orderId={} ttl={}s expiraEm={}", order.id, ttlSeconds, order.reserveExpiresAt)
@@ -133,9 +133,9 @@ class PixCheckoutService(
     fun releaseReservationTx(orderId: Long) {
         val order = orderRepository.findById(orderId)
             .orElseThrow { IllegalStateException("Order $orderId não encontrado") }
-        if (order.status == OrderStatus.RESERVADO && !order.paid) {
+        if (order.status == OrderStatus.WAITING && !order.paid) {
             order.items.forEach { item -> bookService.release(item.bookId, item.quantity) }
-            order.status = OrderStatus.RESERVA_EXPIRADA
+            order.status = OrderStatus.EXPIRED
             order.reserveExpiresAt = null
             orderRepository.save(order)
             log.info("RESERVA LIBERADA: orderId={}", orderId)

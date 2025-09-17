@@ -27,7 +27,7 @@ class CardPaymentProcessor(
         if (order.paid) return true
 
         val now = OffsetDateTime.now()
-        if (order.status != OrderStatus.RESERVADO) {
+        if (order.status != OrderStatus.WAITING) {
             log.info("CONFIRM CARD: ignorado chargeId={}, status atual={}", chargeId, order.status); return false
         }
         if (order.reserveExpiresAt != null && now.isAfter(order.reserveExpiresAt)) {
@@ -36,9 +36,9 @@ class CardPaymentProcessor(
 
         order.paid = true
         order.paidAt = now
-        order.status = OrderStatus.CONFIRMADO
+        order.status = OrderStatus.CONFIRMED
         orderRepository.save(order)
-        log.info("CONFIRM CARD: order {} confirmado (chargeId={})", order.id, chargeId)
+        log.info("CONFIRM CARD: order {} CONFIRMED (chargeId={})", order.id, chargeId)
 
         runCatching {
             emailService.sendCardClientEmail(order)

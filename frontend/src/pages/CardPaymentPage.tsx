@@ -2,77 +2,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-/* ===================== Tipos mínimos da SDK Efí ===================== */
-type AllowedBrand = "visa" | "mastercard" | "amex" | "diners" | "elo" | "hipercard";
-
-interface PaymentTokenResponse {
-  payment_token: string;
-  card_mask?: string;
-}
-interface PaymentTokenError {
-  error_description?: string;
-}
-interface CheckoutAPI {
-  getPaymentToken(
-    params: {
-      brand: AllowedBrand;
-      number: string;
-      cvv: string;
-      expiration_month: string; // "MM"
-      expiration_year: string;  // "AA"
-      reuse: boolean;
-    },
-    callback: (
-      error: PaymentTokenError | null,
-      response: PaymentTokenResponse | null
-    ) => void
-  ): void;
-}
-declare global {
-  interface Window {
-    $gn?: { ready(fn: (checkout: CheckoutAPI) => void): void };
-    __efiCheckout?: CheckoutAPI;
-    __efiCheckoutReady?: boolean;
-  }
-}
-
-/* ===================== Helper: aguarda SDK Efí ===================== */
-async function ensureEfiSdkLoaded(): Promise<CheckoutAPI> {
-  if (window.__efiCheckoutReady && window.__efiCheckout) {
-    return window.__efiCheckout;
-  }
-
-  if (window.$gn && typeof window.$gn.ready === "function") {
-    await new Promise<void>((resolve) => {
-      window.$gn!.ready((checkout) => {
-        window.__efiCheckout = checkout;
-        window.__efiCheckoutReady = true;
-        resolve();
-      });
-      setTimeout(() => resolve(), 8000);
-    });
-  } else {
-    await new Promise<void>((resolve) => {
-      const tick = setInterval(() => {
-        if (window.__efiCheckoutReady && window.__efiCheckout) {
-          clearInterval(tick);
-          resolve();
-        }
-      }, 150);
-      setTimeout(() => {
-        clearInterval(tick);
-        resolve();
-      }, 8000);
-    });
-  }
-
-  if (!window.__efiCheckout) {
-    throw new Error(
-      "SDK do Efí indisponível. Verifique o script com seu payee_code em index.html."
-    );
-  }
-  return window.__efiCheckout;
-}
+// ---- Efí (via pacote NPM) ----
+import {
+  tokenize,
+  getInstallments,
+  verifyBrandFromNumber,
+  isScriptBlocked,
+  type CardBrand,
+  type InstallmentItem,
+} from "../services/efiCard";
 
 /* ===================== Tipos e helpers locais ===================== */
 
@@ -102,7 +40,14 @@ interface CheckoutFormData {
   shipping?: number;
 }
 
-type BrandUI = "visa" | "mastercard" | "amex" | "diners" | "elo" | "hipercard";
+type BrandUI = CardBrand; // "visa" | "mastercard" | "amex" | "elo" | "diners"
+
+// Preferir vir das envs, com fallback no seu payee_code
+const PAYEE_CODE =
+  (import.meta as unknown as { env?: { VITE_EFI_PAYEE_CODE?: string } }).env?.VITE_EFI_PAYEE_CODE ??
+  "cf1a4eb72fb74687e6a95a3da1bd027b";
+
+const EFI_ENV: "production" | "sandbox" = import.meta.env.PROD ? "production" : "sandbox";
 
 const API_BASE =
   ((import.meta as unknown as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE) ??
@@ -121,6 +66,7 @@ function formatCardNumber(value: string, brand: BrandUI): string {
   }
   return digits.slice(0, 16).replace(/(\d{4})(?=\d)/g, "$1 ").trim();
 }
+
 function formatMonthStrict(value: string): string {
   let d = value.replace(/\D/g, "").slice(0, 2);
   if (d.length === 1) {
@@ -132,21 +78,19 @@ function formatMonthStrict(value: string): string {
   }
   return d;
 }
-function formatYearStrict(value: string): string {
-  return value.replace(/\D/g, "").slice(0, 2);
+
+function formatYearYYYY(value: string): string {
+  // força YYYY
+  let d = value.replace(/\D/g, "").slice(0, 4);
+  if (d.length === 2) d = `20${d}`;
+  return d;
 }
+
 function formatCvv(value: string, brand: BrandUI): string {
   const max = brand === "amex" ? 4 : 3;
   return value.replace(/\D/g, "").slice(0, max);
 }
 
-// Detecção simples pela BIN (visa/master/amex); outras via <select>
-function detectBrandFromDigits(digits: string): BrandUI | null {
-  if (/^3[47]/.test(digits)) return "amex";
-  if (/^4/.test(digits)) return "visa";
-  if (/^(5[1-5]|2(2[2-9]|[3-6]|7[01]|720))/.test(digits)) return "mastercard";
-  return null;
-}
 function isValidLuhn(numDigits: string): boolean {
   let sum = 0,
     dbl = false;
@@ -161,10 +105,7 @@ function isValidLuhn(numDigits: string): boolean {
   }
   return sum % 10 === 0;
 }
-function perInstallmentFor(total: number, n: number): string {
-  const v = Math.round((total / n) * 100) / 100;
-  return v.toFixed(2);
-}
+
 function readJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
@@ -175,13 +116,18 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
+const toYYYY = (yyOrYYYY: string) => {
+  const d = yyOrYYYY.replace(/\D/g, "");
+  return d.length === 2 ? `20${d}` : d.slice(0, 4);
+};
+
 /* ===================== Componente ===================== */
 
 interface CardData {
   number: string;
   holderName: string;
   expirationMonth: string; // "MM"
-  expirationYear: string;  // "AA"
+  expirationYear: string;  // "YYYY"
   cvv: string;             // 3/4
   brand: BrandUI;
 }
@@ -216,14 +162,72 @@ export default function CardPaymentPage() {
   });
 
   const [installments, setInstallments] = useState<number>(1);
+  const [installmentOptions, setInstallmentOptions] = useState<InstallmentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const numberDigits = card.number.replace(/\D/g, "");
-  const inferredBrand = detectBrandFromDigits(numberDigits);
-  const effectiveBrand: BrandUI = inferredBrand ?? brand;
-  const cvvLen = effectiveBrand === "amex" ? 4 : 3;
+  const cvvLen = brand === "amex" ? 4 : 3;
 
+  // Checa bloqueio de fingerprint (opcional)
+  useEffect(() => {
+    (async () => {
+      try {
+        const blocked = await isScriptBlocked();
+        if (blocked) console.warn("Fingerprint/script da Efí bloqueado por extensão!");
+      } catch {
+        // silencioso
+      }
+    })();
+  }, []);
+
+  // Detecta bandeira real quando o número tem BIN suficiente
+  useEffect(() => {
+    (async () => {
+      if (numberDigits.length < 6) return;
+      try {
+        const b = await verifyBrandFromNumber(numberDigits);
+        if (b !== "unsupported" && b !== "undefined") {
+          setBrand(b as CardBrand);
+          setCard(prev => ({
+            ...prev,
+            brand: b as BrandUI,
+            number: formatCardNumber(prev.number, b as BrandUI),
+            cvv: formatCvv(prev.cvv, b as BrandUI),
+          }));
+        }
+      } catch {
+        // ignora
+      }
+    })();
+  }, [numberDigits]);
+
+  // Carrega parcelas oficiais conforme conta/brand/total
+  useEffect(() => {
+    (async () => {
+      try {
+        const cents = Math.round(total * 100);
+        if (cents <= 0) {
+          setInstallmentOptions([]);
+          setInstallments(1);
+          return;
+        }
+        const resp = await getInstallments(PAYEE_CODE, EFI_ENV, brand as CardBrand, cents);
+        setInstallmentOptions(resp.installments || []);
+        if (resp.installments?.length) {
+          setInstallments(resp.installments[0].installment);
+        } else {
+          setInstallments(1);
+        }
+      } catch (e) {
+        console.error("Falha ao buscar parcelas:", e);
+        setInstallmentOptions([]);
+        setInstallments(1);
+      }
+    })();
+  }, [brand, total]);
+
+  // Handlers de input
   const onChangeBrand = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newBrand = e.target.value as BrandUI;
     setBrand(newBrand);
@@ -235,7 +239,7 @@ export default function CardPaymentPage() {
     }));
   };
   const onChangeNumber = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const b = effectiveBrand;
+    const b = brand;
     setCard((prev) => ({ ...prev, number: formatCardNumber(e.target.value, b) }));
   };
   const onChangeHolder = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -245,121 +249,97 @@ export default function CardPaymentPage() {
     setCard((prev) => ({ ...prev, expirationMonth: formatMonthStrict(e.target.value) }));
   };
   const onChangeYear = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setCard((prev) => ({ ...prev, expirationYear: formatYearStrict(e.target.value) }));
+    setCard((prev) => ({ ...prev, expirationYear: formatYearYYYY(e.target.value) }));
   };
   const onChangeCvv = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const b = effectiveBrand;
+    const b = brand;
     setCard((prev) => ({ ...prev, cvv: formatCvv(e.target.value, b) }));
   };
 
   // Validações básicas
   const lenOk =
-    (effectiveBrand === "amex" && numberDigits.length === 15) ||
-    (effectiveBrand !== "amex" && numberDigits.length >= 14 && numberDigits.length <= 16);
+    (brand === "amex" && numberDigits.length === 15) ||
+    (brand !== "amex" && numberDigits.length >= 14 && numberDigits.length <= 16);
   const luhnOk = lenOk && isValidLuhn(numberDigits);
   const holderOk = card.holderName.trim().length > 0;
   const monthOk =
     /^\d{2}$/.test(card.expirationMonth) &&
     Number(card.expirationMonth) >= 1 &&
     Number(card.expirationMonth) <= 12;
-  const yearOk = /^\d{2}$/.test(card.expirationYear);
+  const yearOk = /^\d{4}$/.test(card.expirationYear); // YYYY obrigatório
   const cvvOk = new RegExp(`^\\d{${cvvLen}}$`).test(card.cvv);
 
-  const canPay = !loading && luhnOk && holderOk && monthOk && yearOk && cvvOk && total > 0;
+  const holderDocument = (form.cpf ?? "").replace(/\D/g, "");
+  const docOk = holderDocument.length >= 11; // regra simples p/ CPF
 
+  const canPay =
+    !loading && luhnOk && holderOk && monthOk && yearOk && cvvOk && docOk && total > 0;
+
+  // Valor da parcela selecionada (usa oficial quando disponível)
+  const selectedInstallment = installmentOptions.find(
+    (opt) => opt.installment === installments
+  );
   const perInstallment = useMemo(() => {
+    if (selectedInstallment) return selectedInstallment.value / 100;
     if (installments <= 1) return total;
     return Math.round((total / installments) * 100) / 100;
-  }, [total, installments]);
+  }, [selectedInstallment, installments, total]);
 
+  // Pagar
   const handlePay = async () => {
     if (!canPay) return;
     setLoading(true);
     setErrorMsg(null);
 
     try {
-      const checkout = await ensureEfiSdkLoaded();
+      const tokenResp = await tokenize(PAYEE_CODE, EFI_ENV, {
+        brand: brand as CardBrand,
+        number: numberDigits,
+        cvv: card.cvv,
+        expirationMonth: card.expirationMonth,
+        expirationYear: toYYYY(card.expirationYear), // garante YYYY
+        holderName: card.holderName,
+        holderDocument,
+        reuse: false,
+      });
 
-      const allowed: AllowedBrand[] = ["visa", "mastercard", "amex", "diners", "elo", "hipercard"];
-      let brandToSend = ((inferredBrand ?? card.brand) as string).toLowerCase().trim() as AllowedBrand;
+      const res = await fetch(`${API_BASE}/api/checkout/card`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...form,
+          payment: "card",
+          paymentToken: tokenResp.payment_token,
+          installments,
+          cartItems: cart,
+          total,
+          shipping,
+        }),
+      });
 
-      if (!allowed.includes(brandToSend)) {
-        const det = detectBrandFromDigits(numberDigits);
-        brandToSend = ((det ?? "visa") as string) as AllowedBrand;
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `Erro HTTP ${res.status}`);
       }
 
-      await new Promise<void>((resolve, reject) => {
-        checkout.getPaymentToken(
-          {
-            brand: brandToSend,
-            number: numberDigits,
-            cvv: card.cvv,
-            expiration_month: card.expirationMonth,
-            expiration_year: card.expirationYear,
-            reuse: false,
-          },
-          async (error, response) => {
-            try {
-              // logs úteis para diagnóstico
-              if (!response?.payment_token) {
-                console.error("EFI getPaymentToken error:", error);
-                console.error("EFI getPaymentToken empty response:", response);
-              }
+      const data: {
+        success?: boolean;
+        message?: string;
+        orderId?: string;
+        chargeId?: string | null;
+        status?: string | null;
+      } = await res.json();
 
-              if (error || !response?.payment_token) {
-                reject(
-                  new Error(
-                    error?.error_description ??
-                      "Erro ao gerar token de pagamento."
-                  )
-                );
-                return;
-              }
+      localStorage.removeItem("cart");
 
-              // Envia para o backend de cartão
-              const res = await fetch(`${API_BASE}/api/checkout/card`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  ...form,
-                  payment: "card",
-                  paymentToken: (response as PaymentTokenResponse).payment_token,
-                  installments,
-                  cartItems: cart,
-                  total,
-                  shipping,
-                }),
-              });
+      const paidStatuses = ["PAID", "APPROVED", "CAPTURED", "CONFIRMED"];
+      const isPaid = data.status
+        ? paidStatuses.includes(String(data.status).toUpperCase())
+        : false;
 
-              if (!res.ok) {
-                const txt = await res.text();
-                reject(new Error(txt || `Erro HTTP ${res.status}`));
-                return;
-              }
-
-              const data: {
-                success?: boolean;
-                message?: string;
-                orderId?: string;
-                chargeId?: string | null;
-                status?: string | null;
-              } = await res.json();
-
-              localStorage.removeItem("cart");
-
-              const paidStatuses = ["PAID", "APPROVED", "CAPTURED", "CONFIRMED"];
-              const isPaid = data.status ? paidStatuses.includes(data.status.toUpperCase()) : false;
-
-              navigate(
-                `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${isPaid ? "true" : "false"}`
-              );
-              resolve();
-            } catch (e) {
-              reject(e instanceof Error ? e : new Error("Erro inesperado."));
-            }
-          }
-        );
-      });
+      navigate(
+        `/pedido-confirmado?orderId=${data.orderId}&payment=card&paid=${isPaid ? "true" : "false"}`
+      );
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Falha no pagamento.");
       console.error(e);
@@ -377,16 +357,16 @@ export default function CardPaymentPage() {
         <option value="visa">Visa</option>
         <option value="mastercard">Mastercard</option>
         <option value="amex">American Express</option>
-        <option value="diners">Diners</option>
         <option value="elo">Elo</option>
-        <option value="hipercard">Hipercard</option>
+        <option value="diners">Diners</option>
+        {/* Removido Hipercard: não consta como suportado na doc que você enviou */}
       </select>
 
       <input
         value={card.number}
         onChange={onChangeNumber}
         placeholder={
-          effectiveBrand === "amex"
+          brand === "amex"
             ? "Número do cartão (ex.: 3714 496353 98431)"
             : "Número do cartão (ex.: 4111 1111 1111 1111)"
         }
@@ -415,7 +395,7 @@ export default function CardPaymentPage() {
         <input
           value={card.expirationYear}
           onChange={onChangeYear}
-          placeholder="AA"
+          placeholder="AAAA"
           className="border p-2 w-1/2 mb-2 rounded"
           inputMode="numeric"
           autoComplete="cc-exp-year"
@@ -431,21 +411,34 @@ export default function CardPaymentPage() {
         autoComplete="cc-csc"
       />
 
-      <label className="block text-sm font-medium mb-1">Parcelas (sem juros)</label>
+      <label className="block text-sm font-medium mb-1">Parcelas</label>
       <select
         className="border p-2 w-full rounded mb-2"
         value={installments}
         onChange={(e) => setInstallments(Number(e.target.value))}
       >
-        {[1, 2, 3, 4, 5, 6].map((n) => (
-          <option value={n} key={n}>
-            {n}x {n === 1 ? "(à vista)" : `de R$ ${perInstallmentFor(total, n)}`} — sem juros
-          </option>
-        ))}
+        {installmentOptions.length > 0
+          ? installmentOptions.map((opt) => (
+              <option value={opt.installment} key={opt.installment}>
+                {opt.installment}x de R$ {(opt.value / 100).toFixed(2)}{" "}
+                {opt.has_interest ? " (c/ juros)" : " (s/ juros)"}
+              </option>
+            ))
+          : [1, 2, 3, 4, 5, 6].map((n) => (
+              <option value={n} key={n}>
+                {n}x
+              </option>
+            ))}
       </select>
       <p className="text-sm text-gray-600 mb-4">
-        {installments}x de R$ {perInstallment.toFixed(2)} (total R$ {total.toFixed(2)}) — sem juros
+        {installments}x de R$ {perInstallment.toFixed(2)} (total R$ {total.toFixed(2)})
       </p>
+
+      {!docOk && (
+        <div className="bg-yellow-50 text-yellow-700 p-2 mb-3 rounded">
+          Informe um CPF válido no passo anterior para continuar.
+        </div>
+      )}
 
       {errorMsg && (
         <div className="bg-red-50 text-red-600 p-2 mb-4 rounded">

@@ -63,13 +63,13 @@ class PixEfiWebhookController(
         if (order.paid) return ResponseEntity.ok("ℹ️ Ignorado: pedido já estava pago")
 
         val now = OffsetDateTime.now()
-        val reservaValida = order.status == OrderStatus.RESERVADO &&
+        val reservaValida = order.status == OrderStatus.WAITING &&
                 (order.reserveExpiresAt == null || now.isBefore(order.reserveExpiresAt))
 
         return if (reservaValida) {
             order.paid = true
             order.paidAt = now
-            order.status = OrderStatus.CONFIRMADO
+            order.status = OrderStatus.CONFIRMED
             orderRepository.save(order)
 
             runCatching {
@@ -80,9 +80,9 @@ class PixEfiWebhookController(
             }
 
             order.id?.let { runCatching { events.publishPaid(it) } }
-            ResponseEntity.ok("✅ Pago; reserva válida; pedido confirmado; e-mails enviados")
+            ResponseEntity.ok("✅ Pago; reserva válida; pedido CONFIRMED; e-mails enviados")
         } else {
-            order.status = OrderStatus.CANCELADO_ESTORNADO
+            order.status = OrderStatus.REFUNDED
             orderRepository.save(order)
             log.warn("Pagamento recebido após expiração da reserva. txid={}, orderId={}", txid, order.id)
             ResponseEntity.ok("⚠️ Pago após expiração; pedido cancelado/estorno")

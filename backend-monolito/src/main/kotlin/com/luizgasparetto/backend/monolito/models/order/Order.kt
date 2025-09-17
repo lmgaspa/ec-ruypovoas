@@ -13,6 +13,7 @@ data class Order(
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     var id: Long? = null,
 
+    // Dados do cliente
     @Column(nullable = false) val firstName: String,
     @Column(nullable = false) val lastName: String,
     @Column(nullable = false) val email: String,
@@ -31,37 +32,44 @@ data class Order(
     @Column(columnDefinition = "TEXT")
     var note: String? = null,
 
-    // 🔹 cartão
+    // Cartão
     @Column(nullable = true)
     var installments: Int? = 1,
 
-    @Column(nullable = true, length = 16)
-    var paymentMethod: String? = null, // "pix" | "card"
+    // Método de pagamento: "card" ou "pix"
+    @Column(nullable = false, length = 8)
+    var paymentMethod: String = "card",
 
+    // Cartão: chargeId da Efí (PIX normalmente não usa)
     @Column(name = "charge_id", unique = true)
     var chargeId: String? = null,
 
+    // Totais
     @Column(nullable = false, precision = 10, scale = 2) val total: BigDecimal,
     @Column(nullable = false, precision = 10, scale = 2) val shipping: BigDecimal,
 
+    // Pagamento
     @Column(nullable = false)
     var paid: Boolean = false,
 
-    @Column(nullable = false, unique = true, length = 35)
-    var txid: String,
+    // PIX: txid opcional (para cartão fica null)
+    @Column(nullable = true, unique = true, length = 35)
+    var txid: String? = null,
 
     @Column(name = "mailed_at")
     var mailedAt: OffsetDateTime? = null,
 
+    // PIX
     @Column(columnDefinition = "TEXT")
     var qrCode: String? = null,
 
     @Column(columnDefinition = "TEXT")
     var qrCodeBase64: String? = null,
 
+    // Status interno da ordem
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 32)
-    var status: OrderStatus = OrderStatus.CRIADO,
+    var status: OrderStatus = OrderStatus.NEW,
 
     @Column(name = "reserve_expires_at")
     var reserveExpiresAt: OffsetDateTime? = null,

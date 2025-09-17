@@ -6,35 +6,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link href="/src/styles.css" rel="stylesheet">
     <title>Editora Nosso Lar</title>
-
-    <!-- 🔑 Efí JS (produção). Troque a URL para a de homologação se for testar sandbox. -->
-    <script type="text/javascript">
-      (function () {
-        var s = document.createElement("script");
-        s.type = "text/javascript";
-        var v = parseInt(Math.random() * 1000000);
-        s.src = "https://cobrancas.api.efipay.com.br/v1/cdn/cf1a4eb72fb74687e6a95a3da1bd027b/" + v;
-        s.async = false;
-        s.id = "cf1a4eb72fb74687e6a95a3da1bd027b";
-        if (!document.getElementById("cf1a4eb72fb74687e6a95a3da1bd027b")) {
-          document.getElementsByTagName("head")[0].appendChild(s);
-        }
-
-        // Bootstrap do objeto global
-        window.$gn = window.$gn || {
-          ready: function (fn) {
-            window.$gn.done = fn;
-          },
-          done: null
-        };
-
-        // Registra o callback: a SDK da Efí chama isso passando o "checkout"
-        window.$gn.ready(function (checkout) {
-          window.__efiCheckout = checkout;
-          window.__efiCheckoutReady = true;
-        });
-      })();
-    </script>
   </head>
   <body>
     <div id="root"></div>

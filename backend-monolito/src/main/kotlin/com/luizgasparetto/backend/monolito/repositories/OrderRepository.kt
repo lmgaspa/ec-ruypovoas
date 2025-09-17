@@ -5,11 +5,15 @@ import com.luizgasparetto.backend.monolito.models.order.OrderStatus
 import org.springframework.data.jpa.repository.EntityGraph
 import org.springframework.data.jpa.repository.JpaRepository
 import org.springframework.data.jpa.repository.Query
+import org.springframework.stereotype.Repository
 import java.time.OffsetDateTime
 
+@Repository
 interface OrderRepository : JpaRepository<Order, Long> {
 
     fun findByTxid(txid: String): Order?
+
+    fun findByChargeId(chargeId: String): Order?   // ← usado no CardEfiWebhookService
 
     @EntityGraph(attributePaths = ["items"])
     fun findWithItemsByTxid(txid: String): Order?
@@ -21,14 +25,16 @@ interface OrderRepository : JpaRepository<Order, Long> {
     fun findWithItemsById(id: Long): Order?
 
     @EntityGraph(attributePaths = ["items"])
-    @Query("""
+    @Query(
+        """
         select distinct o
-          from Order o
+          from #{#entityName} o
           left join o.items it
          where o.paid = false
            and o.status = :status
            and o.reserveExpiresAt is not null
            and o.reserveExpiresAt < :now
-    """)
+        """
+    )
     fun findExpiredReservations(now: OffsetDateTime, status: OrderStatus): List<Order>
 }

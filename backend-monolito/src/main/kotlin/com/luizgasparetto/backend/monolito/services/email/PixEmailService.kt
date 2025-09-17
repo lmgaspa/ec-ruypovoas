@@ -18,7 +18,7 @@ class PixEmailService(
     fun sendPixClientEmail(order: Order) {
         sendEmail(
             to = order.email,
-            subject = "✅ Pagamento confirmado (#${order.id}) — Editora Nosso Lar",
+            subject = "✅ Pagamento CONFIRMED (#${order.id}) — Editora Nosso Lar",
             html = buildHtmlMessage(order, isAuthor = false)
         )
     }
@@ -94,7 +94,7 @@ class PixEmailService(
 
         val headerClient = """
             <p style="margin:0 0 12px">Olá, <strong>${order.firstName} ${order.lastName}</strong>!</p>
-            <p style="margin:0 0 6px">🎉 <strong>Recebemos o seu pagamento via Pix.</strong> Seu pedido foi confirmado.</p>
+            <p style="margin:0 0 6px">🎉 <strong>Recebemos o seu pagamento via Pix.</strong> Seu pedido foi CONFIRMED.</p>
             <p style="margin:0 0 6px">📍 Endereço de entrega: $addressLine</p>
             $noteBlock
         """.trimIndent()
@@ -150,7 +150,7 @@ class PixEmailService(
               $contactBlock
             </div>
             <div style="background:#fafafa;color:#888;padding:12px 20px;text-align:center;font-size:12px">
-              © ${java.time.Year.now()} Editora Nosso Lar · Todos os direitos reservados · ✉️ <a href="mailto:luhmgasparetto@gmail.com" style="color:#888;text-decoration:none">luhmgasparetto@gmail.com</a>
+              © ${java.time.Year.now()} Editora Nosso Lar · Todos os direitos WAITINGs · ✉️ <a href="mailto:luhmgasparetto@gmail.com" style="color:#888;text-decoration:none">luhmgasparetto@gmail.com</a>
             </div>
           </div>
         </body>

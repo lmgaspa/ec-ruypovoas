@@ -22,14 +22,14 @@ class PixReservationReaper(
     @Transactional
     fun reap() {
         val now = OffsetDateTime.now()
-        val expired = orderRepository.findExpiredReservations(now, OrderStatus.RESERVADO)
+        val expired = orderRepository.findExpiredReservations(now, OrderStatus.WAITING)
         if (expired.isEmpty()) return
 
         var released = 0
         expired.forEach { order ->
-            // Somente PIX: sem chargeId (cartão) e não marcado explicitamente como "card"
+            // Somente PIX: sem chargeId (cartão) e explicitamente "pix"
             val isPix = order.chargeId.isNullOrBlank() &&
-                    (order.paymentMethod?.equals("pix", ignoreCase = true) != false)
+                    order.paymentMethod.equals("pix", ignoreCase = true)
             if (!isPix) return@forEach
 
             // 1) devolve estoque
@@ -38,22 +38,28 @@ class PixReservationReaper(
                 released += item.quantity
             }
 
-            // 2) tenta cancelar a cobrança Pix (não derruba a transação)
-            runCatching { pixClient.cancel(order.txid) }
-                .onSuccess { ok ->
-                    if (ok) log.info("PIX-REAPER: cobrança cancelada txid={}", order.txid)
-                    else     log.warn("PIX-REAPER: cancel PATCH não-2xx txid={}", order.txid)
-                }
-                .onFailure { e ->
-                    log.warn("PIX-REAPER: falha ao cancelar txid={}: {}", order.txid, e.message)
-                }
+            // 2) tenta cancelar a cobrança Pix (só se txid não for nulo/vazio)
+            val txid = order.txid
+            if (!txid.isNullOrBlank()) {
+                runCatching { pixClient.cancel(txid) }
+                    .onSuccess { ok ->
+                        if (ok) log.info("PIX-REAPER: cobrança cancelada txid={}", txid)
+                        else     log.warn("PIX-REAPER: cancel PATCH não-2xx txid={}", txid)
+                    }
+                    .onFailure { e ->
+                        log.warn("PIX-REAPER: falha ao cancelar txid={}: {}", txid, e.message)
+                    }
+            } else {
+                log.warn("PIX-REAPER: txid ausente para orderId={}, pulando cancel", order.id)
+            }
 
             // 3) marca como reserva expirada
-            order.status = OrderStatus.RESERVA_EXPIRADA
+            order.status = OrderStatus.EXPIRED
             order.reserveExpiresAt = null
             orderRepository.save(order)
             log.info("PIX-REAPER: reserva expirada orderId={} liberada", order.id)
         }
+
         log.info("PIX-REAPER: expirados={}, unidadesDevolvidas={}", expired.size, released)
     }
 }

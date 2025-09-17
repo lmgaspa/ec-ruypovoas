@@ -28,8 +28,8 @@ class PixPaymentProcessor(
 
         val now = OffsetDateTime.now()
 
-        // Só confirma se estiver RESERVADO e dentro do TTL
-        if (order.status != OrderStatus.RESERVADO) {
+        // Só confirma se estiver WAITING e dentro do TTL
+        if (order.status != OrderStatus.WAITING) {
             log.info("POLL: ignorado txid={}, status atual={}", txid, order.status)
             return false
         }
@@ -40,9 +40,9 @@ class PixPaymentProcessor(
 
         order.paid = true
         order.paidAt = now
-        order.status = OrderStatus.CONFIRMADO
+        order.status = OrderStatus.CONFIRMED
         orderRepository.save(order)
-        log.info("POLL: order {} confirmado (txid={})", order.id, txid)
+        log.info("POLL: order {} CONFIRMED (txid={})", order.id, txid)
 
         runCatching {
             emailService.sendPixClientEmail(order)

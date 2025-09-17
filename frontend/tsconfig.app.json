@@ -22,9 +22,9 @@
     "noUncheckedSideEffectImports": true,
 
     /* 👇 garante que os tipos globais da Efí sejam vistos */
-    "typeRoots": ["./node_modules/@types", "./src/types"]
+    "typeRoots": ["./node_modules/@types", "./types", "./src/types"]
   },
   /* 👇 deixa explícito o .d.ts */
-  "include": ["src/**/*", "src/types/**/*.d.ts"],
+  "include": ["src/**/*", "types", "src/types/**/*.d.ts"],
   "exclude": ["node_modules"]
 }

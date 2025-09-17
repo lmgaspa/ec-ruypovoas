@@ -22,7 +22,7 @@ class CardReservationReaper(
     @Transactional
     fun reap() {
         val now = OffsetDateTime.now()
-        val expired = orderRepository.findExpiredReservations(now, OrderStatus.RESERVADO)
+        val expired = orderRepository.findExpiredReservations(now, OrderStatus.WAITING)
         if (expired.isEmpty()) return
 
         var released = 0
@@ -47,7 +47,7 @@ class CardReservationReaper(
             }
 
             // 3) marca pedido como expirado
-            order.status = OrderStatus.RESERVA_EXPIRADA
+            order.status = OrderStatus.EXPIRED
             order.reserveExpiresAt = null
             orderRepository.save(order)
             log.info("CARD-REAPER: reserva expirada orderId={} liberada", order.id)
