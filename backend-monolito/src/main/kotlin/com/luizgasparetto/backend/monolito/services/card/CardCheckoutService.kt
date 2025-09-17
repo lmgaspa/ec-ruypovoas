@@ -16,6 +16,7 @@ import java.time.OffsetDateTime
 import java.util.UUID
 
 @Service
+@Transactional
 class CardCheckoutService(
     private val orderRepository: OrderRepository,
     private val bookService: BookService,
@@ -67,6 +68,7 @@ class CardCheckoutService(
             )
         } catch (e: Exception) {
             log.error("CARD: falha ao cobrar, liberando reserva. orderId={}, err={}", order.id, e.message, e)
+            // Recarrega a ordem com itens e libera a reserva dentro da mesma transação
             releaseReservationTx(order.id!!)
             return CardCheckoutResponse(
                 success = false,
@@ -122,8 +124,7 @@ class CardCheckoutService(
         return items + shipping.toBigDecimal()
     }
 
-    @Transactional
-    fun createOrderTx(request: CardCheckoutRequest, totalAmount: BigDecimal, txid: String): Order {
+    private fun createOrderTx(request: CardCheckoutRequest, totalAmount: BigDecimal, txid: String): Order {
         val order = Order(
             firstName = request.firstName,
             lastName  = request.lastName,
@@ -162,8 +163,8 @@ class CardCheckoutService(
         return saved
     }
 
-    @Transactional
-    fun reserveItemsTx(order: Order, ttlSeconds: Long) {
+    private fun reserveItemsTx(order: Order, ttlSeconds: Long) {
+        // 'order' está gerenciado nesta transação; iterar itens é seguro
         order.items.forEach { item -> bookService.reserveOrThrow(item.bookId, item.quantity) }
         order.status = OrderStatus.WAITING
         order.reserveExpiresAt = OffsetDateTime.now().plusSeconds(ttlSeconds)
@@ -171,10 +172,11 @@ class CardCheckoutService(
         log.info("CARD-RESERVA: orderId={} ttl={}s expiraEm={}", order.id, ttlSeconds, order.reserveExpiresAt)
     }
 
-    @Transactional
-    fun releaseReservationTx(orderId: Long) {
-        val order = orderRepository.findById(orderId)
-            .orElseThrow { IllegalStateException("Order $orderId não encontrado") }
+    private fun releaseReservationTx(orderId: Long) {
+        // Recarrega a ordem com itens (evita LazyInitializationException)
+        val order = orderRepository.findWithItemsById(orderId)
+            ?: throw IllegalStateException("Order $orderId não encontrado")
+
         if (order.status == OrderStatus.WAITING && !order.paid) {
             order.items.forEach { item -> bookService.release(item.bookId, item.quantity) }
             order.status = OrderStatus.EXPIRED
