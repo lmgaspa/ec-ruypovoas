@@ -1,8 +1,65 @@
 // src/pages/CardPaymentPage.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ensureEfiSdkLoaded } from "../utils/loadEfiCdn";
-import type { CheckoutAPI, PaymentTokenResponse } from "../utils/efi-global";
+
+/* ---------- Tipos e helper da SDK Efí (inline) ---------- */
+type Brand = "visa" | "mastercard" | "amex";
+
+interface PaymentTokenResponse {
+  payment_token: string;
+  card_mask?: string;
+}
+interface PaymentTokenError {
+  error_description?: string;
+}
+interface CheckoutAPI {
+  getPaymentToken(
+    params: {
+      brand: string;
+      number: string;
+      cvv: string;
+      expiration_month: string;
+      expiration_year: string;
+      reuse: boolean;
+    },
+    callback: (
+      error: PaymentTokenError | null,
+      response: PaymentTokenResponse | null
+    ) => void
+  ): void;
+}
+declare global {
+  interface Window {
+    __efiCheckout?: CheckoutAPI;
+    __efiCheckoutReady?: boolean;
+    $gn?: { ready(fn: (checkout: CheckoutAPI) => void): void };
+  }
+}
+
+/** Espera a SDK do Efí (exposta no index.html) estar pronta e retorna a API. */
+async function ensureEfiSdkLoaded(): Promise<CheckoutAPI> {
+  if (window.__efiCheckoutReady && window.__efiCheckout) return window.__efiCheckout;
+
+  await new Promise<void>((resolve) => {
+    const tick = setInterval(() => {
+      if (window.__efiCheckoutReady && window.__efiCheckout) {
+        clearInterval(tick);
+        resolve();
+      }
+    }, 100);
+
+    // timeout "suave" para não travar — 8s
+    setTimeout(() => {
+      clearInterval(tick);
+      resolve();
+    }, 8000);
+  });
+
+  const api = window.__efiCheckout;
+  if (!api) throw new Error("SDK do Efí indisponível. Verifique o script no index.html.");
+  return api;
+}
+/* ---------- Fim helper Efí ---------- */
 
 /** Tipos locais */
 interface CartItem {
@@ -31,7 +88,6 @@ interface CheckoutFormData {
   payment?: string;
   shipping?: number;
 }
-type Brand = "visa" | "mastercard" | "amex";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE ??
@@ -203,7 +259,7 @@ export default function CardPaymentPage() {
     setErrorMsg(null);
 
     try {
-      const checkout: CheckoutAPI = await ensureEfiSdkLoaded();
+      const checkout = await ensureEfiSdkLoaded();
 
       const brandToSend: Brand =
         effectiveBrand === "visa"
@@ -233,13 +289,14 @@ export default function CardPaymentPage() {
                 return;
               }
 
-              const res = await fetch(`${API_BASE}/api/checkout`, {
+              // Envia para o endpoint de CARTÃO
+              const res = await fetch(`${API_BASE}/api/checkout/card`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   ...form,
                   payment: "card",
-                  cardToken: (response as PaymentTokenResponse).payment_token,
+                  paymentToken: (response as PaymentTokenResponse).payment_token,
                   installments,
                   cartItems: cart,
                   total,
@@ -256,6 +313,8 @@ export default function CardPaymentPage() {
               const data: {
                 message?: string;
                 orderId?: string;
+                status?: string;
+                success?: boolean;
                 paid?: boolean;
               } = await res.json();
 
@@ -274,7 +333,6 @@ export default function CardPaymentPage() {
       });
     } catch (e) {
       setErrorMsg(e instanceof Error ? e.message : "Falha no pagamento.");
-      // ajuda no debug local:
       // eslint-disable-next-line no-console
       console.error(e);
     } finally {
