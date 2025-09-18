@@ -1,4 +1,4 @@
-package com.luizgasparetto.backend.monolito.config.swagger
+package com.luizgasparetto.backend.monolito.config
 
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
