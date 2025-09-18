@@ -11,6 +11,7 @@ import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
+import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
 import java.math.BigDecimal
 import java.math.RoundingMode
@@ -63,37 +64,47 @@ class CardService(
             .toBigInteger()
             .toInt()
 
+        // customer PRECISA estar dentro de payment.credit_card para o one-step
         val body = mapOf(
             "items" to items,
             "payment" to mapOf(
                 "credit_card" to mapOf(
                     "payment_token" to paymentToken,
-                    "installments" to installments.coerceAtLeast(1)
+                    "installments" to installments.coerceAtLeast(1),
+                    "customer" to customer.filterValues { it != null }
                 )
             ),
-            "customer" to customer.filterValues { it != null },
             "metadata" to mapOf("txid" to txid),
             "amount" to mapOf("value" to amountCents)
         )
 
-        val resp = rt.exchange(
-            "${baseUrl()}/v1/charge/one-step",
-            HttpMethod.POST,
-            HttpEntity(body, headers),
-            String::class.java
-        )
-        require(resp.statusCode.is2xxSuccessful) {
-            "Falha ao criar cobrança (card): ${resp.statusCode}"
+        try {
+            val resp = rt.exchange(
+                "${baseUrl()}/v1/charge/one-step",
+                HttpMethod.POST,
+                HttpEntity(body, headers),
+                String::class.java
+            )
+            require(resp.statusCode.is2xxSuccessful) {
+                "Falha ao criar cobrança (card): ${resp.statusCode}"
+            }
+
+            val json: JsonNode = mapper.readTree(resp.body)
+            val status = json.path("status").asText("").uppercase()
+            val chargeId = json.path("charge_id").asText(null)
+
+            log.info("CARD ONE-STEP: status={}, chargeId={}", status, chargeId)
+
+            val paid = isCardPaidStatus(status)
+            return CardChargeResult(paid = paid, chargeId = chargeId, status = status)
+        } catch (e: HttpStatusCodeException) {
+            // mostra o corpo de erro da Efí para facilitar o diagnóstico
+            log.warn("CARD ONE-STEP: HTTP={} body={}", e.statusCode, e.responseBodyAsString)
+            throw e
+        } catch (e: Exception) {
+            log.warn("CARD ONE-STEP: erro inesperado: {}", e.message, e)
+            throw e
         }
-
-        val json: JsonNode = mapper.readTree(resp.body)
-        val status = json.path("status").asText("").uppercase()
-        val chargeId = json.path("charge_id").asText(null)
-
-        log.info("CARD ONE-STEP: status={}, chargeId={}", status, chargeId)
-
-        val paid = isCardPaidStatus(status)
-        return CardChargeResult(paid = paid, chargeId = chargeId, status = status)
     }
 
     /** Consulta status por charge_id. */
@@ -118,8 +129,6 @@ class CardService(
             setBearerAuth(token)
         }
 
-        // Observação: alguns PSPs usam "cancel", outros "void" ou "refund".
-        // Ajuste o endpoint conforme a sua conta/contrato se necessário.
         return try {
             val resp = rt.exchange(
                 "${baseUrl()}/v1/charge/$chargeId/cancel",

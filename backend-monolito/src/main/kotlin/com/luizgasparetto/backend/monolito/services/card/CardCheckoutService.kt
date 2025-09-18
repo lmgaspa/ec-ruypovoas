@@ -78,6 +78,19 @@ class CardCheckoutService(
             )
         }
 
+        // ⛔ se não houve criação de cobrança, não siga adiante com “processamento”
+        if (result.chargeId.isNullOrBlank()) {
+            log.warn("CARD: cobrança não criada (sem chargeId). status={}, orderId={}", result.status, order.id)
+            releaseReservationTx(order.id!!)
+            return CardCheckoutResponse(
+                success = false,
+                message = "Não foi possível criar a cobrança do cartão. Tente novamente.",
+                orderId = order.id.toString(),
+                chargeId = null,
+                status = if (result.status.isBlank()) "ERROR" else result.status
+            )
+        }
+
         // 4) salvar chargeId e decidir confirmação
         val fresh = orderRepository.findWithItemsById(order.id!!)
             ?: error("Order ${order.id} não encontrado após criação")
