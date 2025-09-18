@@ -1,3 +1,4 @@
+// src/main/kotlin/com/luizgasparetto/backend/monolito/services/card/CardService.kt
 package com.luizgasparetto.backend.monolito.services.card
 
 import com.fasterxml.jackson.databind.JsonNode
@@ -6,10 +7,7 @@ import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
 import com.luizgasparetto.backend.monolito.services.efi.EfiAuthService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpMethod
-import org.springframework.http.MediaType
+import org.springframework.http.*
 import org.springframework.stereotype.Service
 import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
@@ -21,7 +19,7 @@ class CardService(
     private val efiAuthService: EfiAuthService,
     private val props: EfiProperties,
     private val mapper: ObjectMapper,
-    @Qualifier("efiRestTemplate") private val rt: RestTemplate
+    @Qualifier("plainRestTemplate") private val rt: RestTemplate   // <<< plain, sem mTLS
 ) {
     private val log = LoggerFactory.getLogger(CardService::class.java)
 
@@ -64,7 +62,6 @@ class CardService(
             .toBigInteger()
             .toInt()
 
-        // customer dentro de payment.credit_card (mantido como você refatorou)
         val body = mapOf(
             "items" to items,
             "payment" to mapOf(
