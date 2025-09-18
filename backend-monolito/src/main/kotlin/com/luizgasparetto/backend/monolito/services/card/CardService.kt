@@ -52,7 +52,7 @@ class CardService(
         customer: Map<String, Any?>,
         txid: String
     ): CardChargeResult {
-        val token = efiAuthService.getAccessToken()
+        val token = efiAuthService.getAccessToken(EfiAuthService.Api.CHARGES)
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
@@ -64,7 +64,7 @@ class CardService(
             .toBigInteger()
             .toInt()
 
-        // customer PRECISA estar dentro de payment.credit_card para o one-step
+        // customer dentro de payment.credit_card (mantido como você refatorou)
         val body = mapOf(
             "items" to items,
             "payment" to mapOf(
@@ -98,7 +98,6 @@ class CardService(
             val paid = isCardPaidStatus(status)
             return CardChargeResult(paid = paid, chargeId = chargeId, status = status)
         } catch (e: HttpStatusCodeException) {
-            // mostra o corpo de erro da Efí para facilitar o diagnóstico
             log.warn("CARD ONE-STEP: HTTP={} body={}", e.statusCode, e.responseBodyAsString)
             throw e
         } catch (e: Exception) {
@@ -109,7 +108,7 @@ class CardService(
 
     /** Consulta status por charge_id. */
     fun getChargeStatus(chargeId: String): String? {
-        val token = efiAuthService.getAccessToken()
+        val token = efiAuthService.getAccessToken(EfiAuthService.Api.CHARGES)
         val headers = HttpHeaders().apply { setBearerAuth(token) }
         val resp = rt.exchange(
             "${baseUrl()}/v1/charge/$chargeId",
@@ -123,7 +122,7 @@ class CardService(
 
     /** Cancela/void/refunda a cobrança (dependendo do estágio). Retorna true em caso de 2xx. */
     fun cancelCharge(chargeId: String): Boolean {
-        val token = efiAuthService.getAccessToken()
+        val token = efiAuthService.getAccessToken(EfiAuthService.Api.CHARGES)
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)

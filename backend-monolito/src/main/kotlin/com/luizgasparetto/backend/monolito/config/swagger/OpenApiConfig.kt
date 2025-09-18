@@ -1,4 +1,4 @@
-package com.luizgasparetto.backend.monolito.config
+package com.luizgasparetto.backend.monolito.config.swagger
 
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.info.Info
@@ -16,5 +16,4 @@ class OpenApiConfig {
                 .version("v1")
                 .description("Endpoints do checkout Pix, webhook e catálogo")
         )
-            .servers(listOf(Server().url("https://editoranossolar-3fd4fdafdb9e.herokuapp.com")))
 }
