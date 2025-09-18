@@ -30,19 +30,23 @@ class CardService(
 
     /** One-step: cria e tenta capturar a cobrança em uma única chamada. */
     fun createOneStepCharge(
-        totalAmount: BigDecimal,
-        items: List<Map<String, Any>>,
+        totalAmount: BigDecimal,                 // usado só para conferência/log
+        items: List<Map<String, Any>>,           // cada item: name, value(em centavos), amount
         paymentToken: String,
         installments: Int,
         customer: Map<String, Any?>,
         txid: String
     ): CardChargeResult {
-        val amountCents = totalAmount
-            .setScale(2, RoundingMode.HALF_UP)
-            .multiply(BigDecimal(100))
-            .toBigInteger()
-            .toInt()
 
+        // (opcional) confere soma dos itens x totalAmount, só para log
+        val expectedCents = totalAmount.setScale(2, RoundingMode.HALF_UP)
+            .multiply(BigDecimal(100)).toBigInteger().toInt()
+        val itemsSum = items.sumOf { (it["value"] as Number).toInt() * ((it["amount"] as? Number)?.toInt() ?: 1) }
+        if (itemsSum != expectedCents) {
+            log.warn("CARD ONE-STEP: soma dos itens ({}) difere do total informado ({}).", itemsSum, expectedCents)
+        }
+
+        // **IMPORTANTE**: no one-step NÃO existe "amount" no root
         val body = mapOf(
             "items" to items,
             "payment" to mapOf(
@@ -54,14 +58,12 @@ class CardService(
             ),
             "metadata" to mapOf(
                 "custom_id" to txid
-                // opcional:
-                // "notification_url" to "https://SEU_HOST/api/efi-webhook/card"
-            ),
-            "amount" to mapOf("value" to amountCents)
+                // "notification_url" to "https://SEU_HOST/api/efi-webhook/card" // se quiser receber webhook do cartão
+            )
         )
 
         val json: JsonNode = client.oneStep(body)
-        val data = json.path("data")                 // <--- respostas vêm dentro de "data"
+        val data = json.path("data") // respostas da Efí vêm dentro de "data"
         val status = data.path("status").asText("").uppercase()
         val chargeId = data.path("charge_id").asText(null)
 
