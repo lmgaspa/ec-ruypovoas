@@ -5,10 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.luizgasparetto.backend.monolito.config.efi.CardEfiProperties
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
-import org.springframework.http.HttpMethod
-import org.springframework.http.MediaType
+import org.springframework.http.*
 import org.springframework.stereotype.Component
 import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
@@ -39,7 +36,8 @@ class CardClient(
             val resp = rt.exchange(url, HttpMethod.POST, HttpEntity(body, headers), String::class.java)
             return mapper.readTree(resp.body ?: "{}")
         } catch (e: HttpStatusCodeException) {
-            log.warn("CARD one-step: HTTP={} body={}", e.statusCode, e.responseBodyAsString)
+            val response = e.responseBodyAsString
+            log.warn("CARD one-step: HTTP={} body={}", e.statusCode, response)
             throw e
         }
     }

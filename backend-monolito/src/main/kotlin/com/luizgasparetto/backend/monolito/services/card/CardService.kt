@@ -52,13 +52,18 @@ class CardService(
                     "customer" to customer.filterValues { it != null }
                 )
             ),
-            "metadata" to mapOf("txid" to txid),
+            "metadata" to mapOf(
+                "custom_id" to txid
+                // opcional:
+                // "notification_url" to "https://SEU_HOST/api/efi-webhook/card"
+            ),
             "amount" to mapOf("value" to amountCents)
         )
 
         val json: JsonNode = client.oneStep(body)
-        val status = json.path("status").asText("").uppercase()
-        val chargeId = json.path("charge_id").asText(null)
+        val data = json.path("data")                 // <--- respostas vêm dentro de "data"
+        val status = data.path("status").asText("").uppercase()
+        val chargeId = data.path("charge_id").asText(null)
 
         log.info("CARD ONE-STEP: status={}, chargeId={}", status, chargeId)
         return CardChargeResult(
@@ -71,7 +76,8 @@ class CardService(
     /** Consulta status por charge_id. */
     fun getChargeStatus(chargeId: String): String? {
         val json = client.getCharge(chargeId)
-        return json.path("status").asText(null)
+        val data = json.path("data")
+        return data.path("status").asText(null)
     }
 
     /** Cancela/void/refunda a cobrança (dependendo do estágio). */
