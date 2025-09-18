@@ -1,11 +1,12 @@
-// src/main/kotlin/com/luizgasparetto/backend/monolito/services/pix/PixService.kt
 package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
 import com.luizgasparetto.backend.monolito.dto.pix.PixCobrancaResponse
-import com.luizgasparetto.backend.monolito.services.efi.EfiAuthService
-import org.springframework.http.*
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestTemplate
 import org.springframework.beans.factory.annotation.Qualifier
@@ -14,7 +15,7 @@ import java.math.RoundingMode
 
 @Service
 class PixService(
-    private val auth: EfiAuthService,
+    private val auth: PixEfiAuthService,
     private val props: EfiProperties,
     @Qualifier("efiRestTemplate") private val rt: RestTemplate,
     private val mapper: ObjectMapper
@@ -29,7 +30,7 @@ class PixService(
         descricao: String,
         txid: String
     ): PixCobrancaResponse {
-        val token = auth.getAccessToken(EfiAuthService.Api.PIX)
+        val token = auth.getAccessToken()  // <-- sem enum agora
         val base = if (props.sandbox) "https://pix-h.api.efipay.com.br" else "https://pix.api.efipay.com.br"
 
         val valorStr = valor.setScale(2, RoundingMode.HALF_UP).toPlainString()

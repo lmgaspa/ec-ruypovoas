@@ -1,6 +1,7 @@
 package com.luizgasparetto.backend.monolito
 
 import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
+import com.luizgasparetto.backend.monolito.services.card.CardEfiProperties
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -10,7 +11,7 @@ import org.springframework.scheduling.annotation.EnableScheduling
 @SpringBootApplication
 @ConfigurationPropertiesScan
 @EnableScheduling
-@EnableConfigurationProperties(EfiProperties::class)
+@EnableConfigurationProperties(EfiProperties::class, CardEfiProperties::class)
 class BackendMonolitoApplication
 
 fun main(args: Array<String>) {

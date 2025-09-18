@@ -1,10 +1,8 @@
-// src/main/kotlin/com/luizgasparetto/backend/monolito/services/pix/PixClient.kt
 package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
-import com.luizgasparetto.backend.monolito.services.efi.EfiAuthService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpEntity
@@ -17,7 +15,7 @@ import org.springframework.web.client.RestTemplate
 @Service
 class PixClient(
     @Qualifier("efiRestTemplate") private val rt: RestTemplate,
-    private val auth: EfiAuthService,
+    private val auth: PixEfiAuthService,
     private val props: EfiProperties,
     private val mapper: ObjectMapper
 ) {
@@ -28,7 +26,7 @@ class PixClient(
 
     fun getCobranca(txid: String): JsonNode {
         val url = "${baseUrl()}/v2/cob/$txid"
-        val token = auth.getAccessToken(EfiAuthService.Api.PIX)
+        val token = auth.getAccessToken()
         val headers = HttpHeaders().apply { setBearerAuth(token) }
         val res = rt.exchange(url, HttpMethod.GET, HttpEntity<Void>(headers), String::class.java)
         val body = res.body ?: "{}"
@@ -37,7 +35,7 @@ class PixClient(
 
     fun cancel(txid: String): Boolean {
         val url = "${baseUrl()}/v2/cob/$txid"
-        val token = auth.getAccessToken(EfiAuthService.Api.PIX)
+        val token = auth.getAccessToken()
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)

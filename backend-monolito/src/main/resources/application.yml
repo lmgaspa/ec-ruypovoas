@@ -77,6 +77,10 @@ efi:
     cert-path: classpath:producao-811858-editoranossolar.p12
     cert-password: ""
     sandbox: false
+  card:
+    client-id: ${EFI_CARD_CLIENT_ID}     # pode ser igual ao do PIX, se sua conta usar o mesmo
+    client-secret: ${EFI_CARD_CLIENT_SECRET}
+    sandbox: false
 
 springdoc:
   api-docs.path: /api-docs

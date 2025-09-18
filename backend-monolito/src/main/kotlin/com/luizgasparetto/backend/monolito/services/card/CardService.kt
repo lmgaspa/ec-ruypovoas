@@ -1,13 +1,13 @@
-// src/main/kotlin/com/luizgasparetto/backend/monolito/services/card/CardService.kt
 package com.luizgasparetto.backend.monolito.services.card
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
-import com.luizgasparetto.backend.monolito.services.efi.EfiAuthService
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.http.*
+import org.springframework.http.HttpEntity
+import org.springframework.http.HttpHeaders
+import org.springframework.http.HttpMethod
+import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
@@ -16,10 +16,10 @@ import java.math.RoundingMode
 
 @Service
 class CardService(
-    private val efiAuthService: EfiAuthService,
-    private val props: EfiProperties,
+    private val auth: CardEfiAuthService,              // <-- serviço novo de auth (card)
+    private val props: CardEfiProperties,              // <-- propriedades de card (efi.card.*)
     private val mapper: ObjectMapper,
-    @Qualifier("plainRestTemplate") private val rt: RestTemplate   // <<< plain, sem mTLS
+    @Qualifier("plainRestTemplate") private val rt: RestTemplate   // plain, sem mTLS
 ) {
     private val log = LoggerFactory.getLogger(CardService::class.java)
 
@@ -50,7 +50,7 @@ class CardService(
         customer: Map<String, Any?>,
         txid: String
     ): CardChargeResult {
-        val token = efiAuthService.getAccessToken(EfiAuthService.Api.CHARGES)
+        val token = auth.getAccessToken()
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
@@ -105,7 +105,7 @@ class CardService(
 
     /** Consulta status por charge_id. */
     fun getChargeStatus(chargeId: String): String? {
-        val token = efiAuthService.getAccessToken(EfiAuthService.Api.CHARGES)
+        val token = auth.getAccessToken()
         val headers = HttpHeaders().apply { setBearerAuth(token) }
         val resp = rt.exchange(
             "${baseUrl()}/v1/charge/$chargeId",
@@ -119,7 +119,7 @@ class CardService(
 
     /** Cancela/void/refunda a cobrança (dependendo do estágio). Retorna true em caso de 2xx. */
     fun cancelCharge(chargeId: String): Boolean {
-        val token = efiAuthService.getAccessToken(EfiAuthService.Api.CHARGES)
+        val token = auth.getAccessToken()
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
