@@ -2,102 +2,104 @@
 package com.luizgasparetto.backend.monolito.services.efi
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
 import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
+import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
-import java.nio.charset.StandardCharsets
 import java.time.Instant
-import java.util.*
-import java.util.concurrent.ConcurrentHashMap
-import kotlin.math.max
+import java.time.temporal.ChronoUnit
 
 @Service
 class EfiAuthService(
     private val props: EfiProperties,
     private val mapper: ObjectMapper,
-    @Qualifier("efiRestTemplate") private val rt: RestTemplate
+    private val rt: RestTemplate // usa o "efiRestTemplate" por @Qualifier se quiser
 ) {
     enum class Api { PIX, CHARGES }
 
     private val log = LoggerFactory.getLogger(EfiAuthService::class.java)
 
-    private data class CachedToken(
-        val token: String,
-        val expiresAt: Instant
-    )
+    private data class TokenHolder(val token: String, val exp: Instant)
+    private var pixToken: TokenHolder? = null
+    private var chargesToken: TokenHolder? = null
 
-    private val cache = ConcurrentHashMap<Api, CachedToken>()
-
-    /** Obtém um access_token com cache por API (PIX ou CHARGES). */
-    @Synchronized
-    fun getAccessToken(api: Api = Api.CHARGES): String {
-        // cache válido?
-        cache[api]?.let { ct ->
-            if (Instant.now().isBefore(ct.expiresAt)) return ct.token
+    fun getAccessToken(api: Api = Api.PIX): String {
+        val now = Instant.now()
+        val cached = when (api) {
+            Api.PIX -> pixToken
+            Api.CHARGES -> chargesToken
         }
-
-        val token = fetchNewToken(api)
-        cache[api] = token
-        return token.token
+        if (cached != null && cached.exp.isAfter(now.plusSeconds(10))) {
+            return cached.token
+        }
+        val fresh = fetchNewToken(api)
+        when (api) {
+            Api.PIX -> pixToken = fresh
+            Api.CHARGES -> chargesToken = fresh
+        }
+        return fresh.token
     }
 
-    private fun fetchNewToken(api: Api): CachedToken {
-        val base = when (api) {
-            Api.PIX     -> if (props.sandbox) "https://pix-h.api.efipay.com.br" else "https://pix.api.efipay.com.br"
-            Api.CHARGES -> if (props.sandbox) "https://cobrancas-h.api.efipay.com.br" else "https://cobrancas.api.efipay.com.br"
-        }
+    private fun baseUrl(api: Api): String = when {
+        api == Api.PIX && props.sandbox -> "https://pix-h.api.efipay.com.br"
+        api == Api.PIX && !props.sandbox -> "https://pix.api.efipay.com.br"
+        api == Api.CHARGES && props.sandbox -> "https://cobrancas-h.api.efipay.com.br"
+        else -> "https://cobrancas.api.efipay.com.br"
+    }
 
-        // ATENÇÃO: para CHARGES o endpoint correto inclui /auth/
-        val tokenUrl = when (api) {
-            Api.PIX     -> "$base/oauth/token"
-            Api.CHARGES -> "$base/auth/oauth/token"
-        }
+    /**
+     * Algumas instalações expõem o token em caminhos diferentes.
+     * Tentamos em ordem até obter 2xx.
+     */
+    private fun tokenPaths(api: Api): List<String> = when (api) {
+        Api.PIX -> listOf("/oauth/token", "/auth/oauth/token")
+        Api.CHARGES -> listOf("/auth/oauth/token", "/oauth/token", "/auth/oauth/v2/token")
+    }
 
-        val clientId = props.clientId
-        val clientSecret = props.clientSecret
-
-        val basic = Base64.getEncoder().encodeToString("$clientId:$clientSecret".toByteArray(StandardCharsets.UTF_8))
+    private fun fetchNewToken(api: Api): TokenHolder {
+        val urlBase = baseUrl(api)
 
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_FORM_URLENCODED
-            accept = listOf(MediaType.APPLICATION_JSON)
-            set(HttpHeaders.AUTHORIZATION, "Basic $basic")
+            setBasicAuth(props.clientId, props.clientSecret)
         }
 
-        val body = "grant_type=client_credentials"
+        val form = LinkedMultiValueMap<String, String>().apply {
+            add("grant_type", "client_credentials")
+            // Se precisar de escopo no seu ambiente, descomente e ajuste:
+            // add("scope", if (api == Api.PIX) "cob.write cob.read pix.write pix.read" else "charges.read charges.write")
+        }
 
-        try {
-            val resp = rt.postForEntity(tokenUrl, HttpEntity(body, headers), String::class.java)
-            val status = resp.statusCode.value()
-            val payload = resp.body ?: "{}"
-
-            if (status !in 200..299) {
-                log.warn("EFI AUTH: HTTP={} body={}", status, payload)
-                error("Falha ao obter token: HTTP $status")
+        var lastErr: Exception? = null
+        for (path in tokenPaths(api)) {
+            val url = "$urlBase$path"
+            try {
+                val resp = rt.postForEntity(url, HttpEntity(form, headers), String::class.java)
+                if (!resp.statusCode.is2xxSuccessful) {
+                    log.warn("EFI AUTH: HTTP={} url={} body={}", resp.statusCode, url, resp.body)
+                    continue
+                }
+                val json = mapper.readTree(resp.body)
+                val accessToken = json.path("access_token").asText(null)
+                    ?: error("access_token ausente: $json")
+                val expiresIn = json.path("expires_in").asLong(3600)
+                val exp = Instant.now().plus(expiresIn - 30, ChronoUnit.SECONDS) // margem
+                log.info("EFI AUTH OK: api={} url={}", api, url)
+                return TokenHolder(accessToken, exp)
+            } catch (e: HttpStatusCodeException) {
+                log.warn("EFI AUTH: HTTP={} url={} body={}", e.statusCode, url, e.responseBodyAsString)
+                lastErr = e
+            } catch (e: Exception) {
+                log.warn("EFI AUTH: falha url={} err={}", url, e.message)
+                lastErr = e
             }
-
-            val json = mapper.readTree(payload)
-            val accessToken = json.path("access_token").asText(null)
-                ?: error("access_token ausente na resposta")
-            val expiresIn = max(1, json.path("expires_in").asInt(3600)) // segundos
-
-            // margem de segurança de 30s
-            val expiresAt = Instant.now().plusSeconds(max(1, expiresIn - 30).toLong())
-
-            log.info("EFI AUTH: token obtido para {} expira em {}s", api, expiresIn)
-            return CachedToken(accessToken, expiresAt)
-        } catch (e: HttpStatusCodeException) {
-            log.warn("EFI AUTH: HTTP={} body={}", e.statusCode, e.responseBodyAsString)
-            throw e
-        } catch (e: Exception) {
-            log.warn("EFI AUTH: erro inesperado: {}", e.message, e)
-            throw e
         }
+        throw IllegalStateException("Falha ao obter token para $api ($urlBase). Último erro: ${lastErr?.message}", lastErr)
     }
 }
