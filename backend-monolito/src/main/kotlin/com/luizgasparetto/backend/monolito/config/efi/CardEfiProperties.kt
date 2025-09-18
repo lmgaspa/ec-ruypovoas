@@ -6,5 +6,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties
 data class CardEfiProperties(
     var clientId: String = "",
     var clientSecret: String = "",
-    var sandbox: Boolean = false
+    var sandbox: Boolean = true
 )
