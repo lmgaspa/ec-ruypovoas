@@ -25,7 +25,7 @@ function HomePage() {
             mediunidade e obsessão, inimigos de vidas passadas, regressão
             de memória, o poder invencível da fé, a força soberana da prece e nos mostra,
             como poucos livros até então, a grande vantagem
-            de confiarmos em Deus e em sua soberana justiça.<br><br>
+            de confiarmos em Deus e em sua soberana justiça.
 
           Jamais desista daquilo que seu coração deseja, pois nenhum sonho é impossível
           quando nos entregamos à vida com confiança e coragem." 
