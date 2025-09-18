@@ -1,6 +1,6 @@
 package com.luizgasparetto.backend.monolito.controllers.checkout
 
-import com.luizgasparetto.backend.monolito.dto.checkout.CheckoutRequest
+import com.luizgasparetto.backend.monolito.dto.pix.PixCheckoutRequest
 import com.luizgasparetto.backend.monolito.dto.pix.PixCheckoutResponse
 import com.luizgasparetto.backend.monolito.services.pix.PixCheckoutService
 import org.springframework.http.ResponseEntity
@@ -15,6 +15,6 @@ class PixCheckoutController(
     private val checkoutService: PixCheckoutService
 ) {
     @PostMapping
-    fun checkoutPix(@RequestBody request: CheckoutRequest): ResponseEntity<PixCheckoutResponse> =
+    fun checkoutPix(@RequestBody request: PixCheckoutRequest): ResponseEntity<PixCheckoutResponse> =
         ResponseEntity.ok(checkoutService.processCheckout(request))
 }

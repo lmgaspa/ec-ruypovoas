@@ -1,6 +1,6 @@
 package com.luizgasparetto.backend.monolito.services.pix
 
-import com.luizgasparetto.backend.monolito.dto.checkout.CheckoutRequest
+import com.luizgasparetto.backend.monolito.dto.pix.PixCheckoutRequest
 import com.luizgasparetto.backend.monolito.dto.pix.PixCheckoutResponse
 import com.luizgasparetto.backend.monolito.models.order.Order
 import com.luizgasparetto.backend.monolito.models.order.OrderItem
@@ -26,7 +26,7 @@ class PixCheckoutService(
 ) {
     private val log = LoggerFactory.getLogger(PixCheckoutService::class.java)
 
-    fun processCheckout(request: CheckoutRequest): PixCheckoutResponse {
+    fun processCheckout(request: PixCheckoutRequest): PixCheckoutResponse {
         // 0) valida disponibilidade (checagem rápida)
         request.cartItems.forEach { item -> bookService.validateStock(item.id, item.quantity) }
 
@@ -73,13 +73,13 @@ class PixCheckoutService(
 
     // ------------------- privados -------------------
 
-    private fun calculateTotalAmount(request: CheckoutRequest): BigDecimal {
+    private fun calculateTotalAmount(request: PixCheckoutRequest): BigDecimal {
         val totalBooks = request.cartItems.sumOf { it.price.toBigDecimal() * BigDecimal(it.quantity) }
         return totalBooks + request.shipping.toBigDecimal()
     }
 
     @Transactional
-    fun createOrderTx(request: CheckoutRequest, totalAmount: BigDecimal, txid: String): Order {
+    fun createOrderTx(request: PixCheckoutRequest, totalAmount: BigDecimal, txid: String): Order {
         val order = Order(
             firstName = request.firstName,
             lastName  = request.lastName,

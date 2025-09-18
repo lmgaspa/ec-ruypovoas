@@ -1,8 +1,8 @@
 package com.luizgasparetto.backend.monolito.services.card
 
+import com.luizgasparetto.backend.monolito.dto.card.CardCartItemDto
 import com.luizgasparetto.backend.monolito.dto.card.CardCheckoutRequest
 import com.luizgasparetto.backend.monolito.dto.card.CardCheckoutResponse
-import com.luizgasparetto.backend.monolito.dto.checkout.CartItemDto
 import com.luizgasparetto.backend.monolito.models.order.Order
 import com.luizgasparetto.backend.monolito.models.order.OrderItem
 import com.luizgasparetto.backend.monolito.models.order.OrderStatus
@@ -22,10 +22,10 @@ class CardCheckoutService(
     private val bookService: BookService,
     private val cardService: CardService,
     private val processor: CardPaymentProcessor,
-    private val cardWatcher: CardWatcher? = null                 // opcional (pode ser nulo se não declarado no contexto)
+    private val cardWatcher: CardWatcher? = null                 // opcional
 ) {
     private val log = LoggerFactory.getLogger(CardCheckoutService::class.java)
-    private val reserveTtlSeconds: Long = 900 // pode externalizar com @Value se preferir
+    private val reserveTtlSeconds: Long = 900 // 15 min (pode externalizar)
 
     fun processCardCheckout(request: CardCheckoutRequest): CardCheckoutResponse {
         // 0) valida estoque e total no servidor
@@ -68,7 +68,6 @@ class CardCheckoutService(
             )
         } catch (e: Exception) {
             log.error("CARD: falha ao cobrar, liberando reserva. orderId={}, err={}", order.id, e.message, e)
-            // Recarrega a ordem com itens e libera a reserva dentro da mesma transação
             releaseReservationTx(order.id!!)
             return CardCheckoutResponse(
                 success = false,
@@ -117,7 +116,7 @@ class CardCheckoutService(
 
     // ================== privados / util ==================
 
-    private fun calculateTotalAmount(shipping: Double, cart: List<CartItemDto>): BigDecimal {
+    private fun calculateTotalAmount(shipping: Double, cart: List<CardCartItemDto>): BigDecimal {
         val items = cart.fold(BigDecimal.ZERO) { acc, it ->
             acc + it.price.toBigDecimal().multiply(BigDecimal(it.quantity))
         }
@@ -164,7 +163,6 @@ class CardCheckoutService(
     }
 
     private fun reserveItemsTx(order: Order, ttlSeconds: Long) {
-        // 'order' está gerenciado nesta transação; iterar itens é seguro
         order.items.forEach { item -> bookService.reserveOrThrow(item.bookId, item.quantity) }
         order.status = OrderStatus.WAITING
         order.reserveExpiresAt = OffsetDateTime.now().plusSeconds(ttlSeconds)
@@ -173,7 +171,6 @@ class CardCheckoutService(
     }
 
     private fun releaseReservationTx(orderId: Long) {
-        // Recarrega a ordem com itens (evita LazyInitializationException)
         val order = orderRepository.findWithItemsById(orderId)
             ?: throw IllegalStateException("Order $orderId não encontrado")
 
