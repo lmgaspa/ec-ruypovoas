@@ -3,7 +3,7 @@ package com.luizgasparetto.backend.monolito.config.efi
 import org.springframework.boot.context.properties.ConfigurationProperties
 
 @ConfigurationProperties("efi.pix")
-data class EfiProperties(
+data class PixEfiProperties(
     var clientId: String = "",
     var clientSecret: String = "",
     var chave: String = "",

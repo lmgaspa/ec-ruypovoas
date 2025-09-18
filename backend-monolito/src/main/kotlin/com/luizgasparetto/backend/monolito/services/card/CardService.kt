@@ -2,6 +2,7 @@ package com.luizgasparetto.backend.monolito.services.card
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.luizgasparetto.backend.monolito.config.efi.CardEfiProperties
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpEntity
@@ -16,10 +17,10 @@ import java.math.RoundingMode
 
 @Service
 class CardService(
-    private val auth: CardEfiAuthService,              // <-- serviço novo de auth (card)
-    private val props: CardEfiProperties,              // <-- propriedades de card (efi.card.*)
+    private val auth: CardEfiAuthService,                 // serviço de auth (card)
+    private val props: CardEfiProperties,                 // propriedades de card (efi.card.*)
     private val mapper: ObjectMapper,
-    @Qualifier("plainRestTemplate") private val rt: RestTemplate   // plain, sem mTLS
+    @Qualifier("plainRestTemplate") private val rt: RestTemplate // plain, sem mTLS
 ) {
     private val log = LoggerFactory.getLogger(CardService::class.java)
 
@@ -86,7 +87,7 @@ class CardService(
                 "Falha ao criar cobrança (card): ${resp.statusCode}"
             }
 
-            val json: JsonNode = mapper.readTree(resp.body)
+            val json: JsonNode = mapper.readTree(resp.body ?: "{}")
             val status = json.path("status").asText("").uppercase()
             val chargeId = json.path("charge_id").asText(null)
 
@@ -114,7 +115,7 @@ class CardService(
             String::class.java
         )
         if (!resp.statusCode.is2xxSuccessful) return null
-        return mapper.readTree(resp.body).path("status").asText(null)
+        return mapper.readTree(resp.body ?: "{}").path("status").asText(null)
     }
 
     /** Cancela/void/refunda a cobrança (dependendo do estágio). Retorna true em caso de 2xx. */

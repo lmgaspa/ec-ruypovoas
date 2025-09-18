@@ -2,7 +2,7 @@ package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.luizgasparetto.backend.monolito.config.efi.EfiProperties // @ConfigurationProperties("efi.pix")
+import com.luizgasparetto.backend.monolito.config.efi.PixEfiProperties
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpEntity
@@ -15,7 +15,7 @@ import org.springframework.web.client.RestTemplate
 
 @Service
 class PixEfiAuthService(
-    private val props: EfiProperties, // efi.pix.*
+    private val props: PixEfiProperties, // efi.pix.*
     private val mapper: ObjectMapper,
     @Qualifier("efiRestTemplate") private val rtPix: RestTemplate // mTLS habilitado via cert-path/cert-password
 ) {

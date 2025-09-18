@@ -19,6 +19,7 @@ class OrderEventsController(
         response.setHeader("Cache-Control", "no-cache, no-transform")
         response.setHeader("Connection", "keep-alive")
         response.setHeader("X-Accel-Buffering", "no")
-        return events.subscribe(orderId, 0L)
+        // timeout padrão configurado dentro do subscribe (330_000 ms). O front pode reabrir depois.
+        return events.subscribe(orderId)
     }
 }

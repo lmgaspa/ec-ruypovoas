@@ -17,74 +17,72 @@ class OrderEventsPublisher(
     private val log = LoggerFactory.getLogger(OrderEventsPublisher::class.java)
 
     private val listeners = ConcurrentHashMap<Long, CopyOnWriteArrayList<SseEmitter>>()
-
     private val heartbeats = ConcurrentHashMap<SseEmitter, ScheduledFuture<*>>()
 
-    fun subscribe(orderId: Long, timeoutMs: Long = 0L): SseEmitter {
+    fun subscribe(orderId: Long, timeoutMs: Long = 330_000L): SseEmitter {
         val emitter = SseEmitter(timeoutMs)
         val list = listeners.computeIfAbsent(orderId) { CopyOnWriteArrayList() }
         list += emitter
         log.info("SSE: subscribed orderId={}, listeners={}", orderId, list.size)
 
-        safeSend(emitter, SseEmitter.event().name("open").data("ok"))
+        safeSend(orderId, emitter, SseEmitter.event().name("open").data("ok"))
 
         val hb = taskScheduler.scheduleAtFixedRate(
-            { safeSend(emitter, SseEmitter.event().name("ping").data("💓")) },
+            { safeSend(orderId, emitter, SseEmitter.event().name("ping").data("💓")) },
             Duration.ofSeconds(20)
         )
-        if (hb != null) heartbeats[emitter] = hb
+        // Em Kotlin o retorno não é nulo; guardar direto:
+        heartbeats[emitter] = hb
 
-        val cleanup = {
-            heartbeats.remove(emitter)?.cancel(true)
-            list.remove(emitter)
-            if (list.isEmpty()) listeners.remove(orderId)
-            log.info("SSE: emitter closed orderId={}, remaining={}", orderId, list.size)
-        }
-
-        emitter.onCompletion(cleanup)
-        emitter.onTimeout(cleanup)
-        emitter.onError { cleanup() }
+        val onDone = { cleanup(orderId, emitter) }
+        emitter.onCompletion(onDone)
+        emitter.onTimeout(onDone)
+        emitter.onError { onDone() }
 
         return emitter
     }
 
     fun publishPaid(orderId: Long) {
         listeners[orderId]?.let { subs ->
-            val dead = mutableListOf<SseEmitter>()
-            val total = subs.size
-
+            var entregues = 0
             subs.forEach { em ->
                 try {
-                    em.send(
-                        SseEmitter.event()
-                            .name("paid")
-                            .data(mapOf("orderId" to orderId))
-                    )
-                    em.complete() // dispara onCompletion -> cleanup
-                } catch (_: Exception) {
-                    dead += em
+                    em.send(SseEmitter.event().name("paid").data(mapOf("orderId" to orderId)))
+                    entregues++
+                    em.complete()
+                } catch (ex: Exception) {
+                    log.info("SSE: cliente desconectou ao enviar 'paid' (orderId={}): {}", orderId, ex.javaClass.simpleName)
+                    cleanup(orderId, em)
                 } finally {
                     heartbeats.remove(em)?.cancel(true)
                 }
             }
-
-            subs.removeAll(dead)
-            if (subs.isEmpty()) listeners.remove(orderId)
-
-            val entregues = total - dead.size
             log.info("SSE: paid enviado orderId={}, entregues={}", orderId, entregues)
         }
     }
 
-    private fun safeSend(em: SseEmitter, ev: SseEmitter.SseEventBuilder) {
-        try { em.send(ev) } catch (_: Exception) { /* cleanup é feito pelos handlers */ }
+    private fun safeSend(orderId: Long, em: SseEmitter, ev: SseEmitter.SseEventBuilder) {
+        try { em.send(ev) } catch (ex: Exception) {
+            log.info("SSE: falha ao enviar evento, removendo emitter (orderId={}): {}", orderId, ex.javaClass.simpleName)
+            cleanup(orderId, em)
+        }
+    }
+
+    private fun cleanup(orderId: Long, emitter: SseEmitter) {
+        heartbeats.remove(emitter)?.cancel(true)
+        listeners[orderId]?.let { list ->
+            list.remove(emitter)
+            if (list.isEmpty()) listeners.remove(orderId)
+            log.info("SSE: emitter closed orderId={}, remaining={}", orderId, list.size)
+        }
+        try { emitter.complete() } catch (_: Exception) {}
     }
 
     @PreDestroy
     fun shutdown() {
         heartbeats.values.forEach { it.cancel(true) }
         heartbeats.clear()
-        listeners.values.flatten().forEach { it.complete() }
+        listeners.values.flatten().forEach { try { it.complete() } catch (_: Exception) {} }
         listeners.clear()
     }
 }

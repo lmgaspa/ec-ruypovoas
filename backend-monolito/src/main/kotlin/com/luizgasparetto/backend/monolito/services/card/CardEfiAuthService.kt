@@ -1,100 +1,71 @@
 package com.luizgasparetto.backend.monolito.services.card
 
-import com.fasterxml.jackson.databind.JsonNode
-import com.fasterxml.jackson.databind.ObjectMapper
+import com.luizgasparetto.backend.monolito.config.efi.CardEfiProperties
 import org.slf4j.LoggerFactory
-import org.springframework.beans.factory.annotation.Qualifier
-import org.springframework.boot.context.properties.ConfigurationProperties
-import org.springframework.http.HttpEntity
-import org.springframework.http.HttpHeaders
-import org.springframework.http.MediaType
+import org.springframework.http.*
 import org.springframework.stereotype.Service
 import org.springframework.util.LinkedMultiValueMap
 import org.springframework.web.client.HttpStatusCodeException
 import org.springframework.web.client.RestTemplate
-import java.lang.IllegalStateException
-
-/**
- * Propriedades específicas de CHARGES (cartão). Não usa mTLS.
- * Configure em application.yml/properties como "efi.card.*".
- */
-@ConfigurationProperties("efi.card")
-data class CardEfiProperties(
-    var clientId: String = "",
-    var clientSecret: String = "",
-    var sandbox: Boolean = true
-)
+import java.nio.charset.StandardCharsets
+import java.util.*
+import java.util.concurrent.atomic.AtomicReference
 
 @Service
 class CardEfiAuthService(
-    private val props: CardEfiProperties, // efi.card.*
-    private val mapper: ObjectMapper,
-    @Qualifier("plainRestTemplate") private val rtPlain: RestTemplate // sem mTLS
+    private val props: CardEfiProperties,
+    private val plainRestTemplate: RestTemplate   // sem mTLS
 ) {
     private val log = LoggerFactory.getLogger(CardEfiAuthService::class.java)
 
-    @Volatile private var token: String? = null
-    @Volatile private var expMillis: Long = 0
+    private data class Token(val accessToken: String, val expiresAtMs: Long)
+    private val cached = AtomicReference<Token?>(null)
 
+    private fun base(): String =
+        if (props.sandbox) "https://cobrancas-h.api.efipay.com.br"
+        else "https://cobrancas.api.efipay.com.br"
+
+    /** Retorna um bearer válido para chamadas de cartão (“charges”). */
     fun getAccessToken(): String {
         val now = System.currentTimeMillis()
-        token?.let { cached ->
-            if (now < expMillis && cached.isNotBlank()) return cached
-        }
-        val (newToken, expSeconds) = fetchNewToken()
-        token = newToken
-        expMillis = now + (expSeconds - 10).coerceAtLeast(30) * 1000L
-        return newToken
+        cached.get()?.let { if (it.expiresAtMs - 5_000 > now) return it.accessToken }
+        return fetchNewToken()
     }
 
-    /** Pair<access_token, expires_inSeconds> */
-    private fun fetchNewToken(): Pair<String, Int> {
-        val headers = HttpHeaders().apply {
-            contentType = MediaType.APPLICATION_FORM_URLENCODED
-            setBasicAuth(props.clientId, props.clientSecret)
-        }
-        val form = LinkedMultiValueMap<String, String>().apply {
-            add("grant_type", "client_credentials")
-        }
+    private fun fetchNewToken(): String {
+        val url = "${base()}/oauth/token" // <-- caminho correto
 
-        // A API de CHARGES historicamente responde em URLs variadas; tentamos todas.
-        val base = if (props.sandbox) "cobrancas-h.efipay.com.br" else "cobrancas.efipay.com.br"
-        val baseApi = if (props.sandbox) "cobrancas-h.api.efipay.com.br" else "cobrancas.api.efipay.com.br"
-        val urls = listOf(
-            "https://$baseApi/oauth/token",
-            "https://$baseApi/auth/oauth/token",
-            "https://$base/oauth/token",
-            "https://$base/auth/oauth/token",
-            "https://$baseApi/auth/oauth/v2/token",
-            "https://$base/auth/oauth/v2/token"
+        val auth = Base64.getEncoder().encodeToString(
+            "${props.clientId}:${props.clientSecret}".toByteArray(StandardCharsets.UTF_8)
         )
 
-        var lastErr: Exception? = null
-        for (u in urls) {
-            try {
-                val resp = rtPlain.postForEntity(u, HttpEntity(form, headers), String::class.java)
-                if (!resp.statusCode.is2xxSuccessful) {
-                    log.warn("EFI CARD AUTH: HTTP={} url={} body={}", resp.statusCode, u, resp.body)
-                    continue
-                }
-                val json: JsonNode = mapper.readTree(resp.body ?: "{}")
-                val token = json.path("access_token").asText(null)
-                    ?: json.path("token").asText(null)
-                val exp = json.path("expires_in").asInt(3600)
-                if (token.isNullOrBlank()) {
-                    log.warn("EFI CARD AUTH: resposta sem token url={} body={}", u, resp.body)
-                    continue
-                }
-                log.info("EFI CARD AUTH OK: url={}", u)
-                return token to exp
-            } catch (e: HttpStatusCodeException) {
-                log.warn("EFI CARD AUTH: HTTP={} url={} body={}", e.statusCode, u, e.responseBodyAsString)
-                lastErr = e
-            } catch (e: Exception) {
-                log.warn("EFI CARD AUTH: falha ao chamar {}: {}", u, e.message)
-                lastErr = e
-            }
+        val body = LinkedMultiValueMap<String, String>().apply {
+            add("grant_type", "client_credentials")
+            add("scope", "charges") // ajuste se seu contrato exigir outro escopo
         }
-        throw IllegalStateException("Falha ao obter token para CHARGES. Último erro: ${lastErr?.message}", lastErr)
+
+        val headers = HttpHeaders().apply {
+            contentType = MediaType.APPLICATION_FORM_URLENCODED
+            set("Authorization", "Basic $auth")
+        }
+
+        try {
+            val resp = plainRestTemplate.postForEntity(url, HttpEntity(body, headers), Map::class.java)
+            val map = resp.body ?: error("Resposta vazia do /oauth/token")
+            val token = (map["access_token"] as? String).orEmpty()
+            val expiresIn = (map["expires_in"] as? Number)?.toLong() ?: 300L
+            require(token.isNotBlank()) { "access_token ausente na resposta" }
+
+            val exp = System.currentTimeMillis() + expiresIn * 1000
+            cached.set(Token(token, exp))
+            log.info("EFI CARD AUTH OK: url={}", url)
+            return token
+        } catch (e: HttpStatusCodeException) {
+            log.warn("EFI CARD AUTH: HTTP={} url={} body={}", e.statusCode, url, e.responseBodyAsString)
+            throw IllegalStateException("Falha ao obter token de cartão (charges): ${e.statusCode}", e)
+        } catch (e: Exception) {
+            log.warn("EFI CARD AUTH: falha ao chamar {}: {}", url, e.message)
+            throw IllegalStateException("Falha ao obter token de cartão: ${e.message}", e)
+        }
     }
 }

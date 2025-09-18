@@ -1,7 +1,7 @@
 package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
+import com.luizgasparetto.backend.monolito.config.efi.PixEfiProperties
 import com.luizgasparetto.backend.monolito.dto.pix.PixCobrancaResponse
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
@@ -16,7 +16,7 @@ import java.math.RoundingMode
 @Service
 class PixService(
     private val auth: PixEfiAuthService,
-    private val props: EfiProperties,
+    private val props: PixEfiProperties,
     @Qualifier("efiRestTemplate") private val rt: RestTemplate,
     private val mapper: ObjectMapper
 ) {

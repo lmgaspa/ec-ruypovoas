@@ -2,7 +2,7 @@ package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.luizgasparetto.backend.monolito.config.efi.EfiProperties
+import com.luizgasparetto.backend.monolito.config.efi.PixEfiProperties
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpEntity
@@ -16,7 +16,7 @@ import org.springframework.web.client.RestTemplate
 class PixClient(
     @Qualifier("efiRestTemplate") private val rt: RestTemplate,
     private val auth: PixEfiAuthService,
-    private val props: EfiProperties,
+    private val props: PixEfiProperties,
     private val mapper: ObjectMapper
 ) {
     private val log = LoggerFactory.getLogger(PixClient::class.java)
