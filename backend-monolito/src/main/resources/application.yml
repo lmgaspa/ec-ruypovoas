@@ -82,7 +82,6 @@ efi:
     client-secret: ${EFI_CARD_CLIENT_SECRET}
     sandbox: false
 
-
 springdoc:
   api-docs.path: /api-docs
   swagger-ui.path: /swagger
