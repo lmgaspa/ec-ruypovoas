@@ -1,8 +1,8 @@
 package com.luizgasparetto.backend.monolito.controllers.pix
 
 import com.fasterxml.jackson.databind.ObjectMapper
-import com.luizgasparetto.backend.monolito.models.webhook.WebhookEvent
 import com.luizgasparetto.backend.monolito.models.order.OrderStatus
+import com.luizgasparetto.backend.monolito.models.webhook.WebhookEvent
 import com.luizgasparetto.backend.monolito.repositories.OrderRepository
 import com.luizgasparetto.backend.monolito.repositories.WebhookEventRepository
 import com.luizgasparetto.backend.monolito.services.PixEmailService
@@ -34,6 +34,16 @@ class PixEfiWebhookController(
 
         val root = runCatching { mapper.readTree(rawBody) }.getOrElse {
             log.warn("EFI WEBHOOK: JSON inválido: {}", it.message)
+            webhookRepo.save(
+                WebhookEvent(
+                    txid = null,
+                    status = "INVALID_JSON",
+                    chargeId = null,
+                    provider = "PIX",
+                    rawBody = rawBody,
+                    receivedAt = OffsetDateTime.now()
+                )
+            )
             return ResponseEntity.ok("⚠️ Ignorado: JSON inválido")
         }
 
@@ -50,7 +60,18 @@ class PixEfiWebhookController(
             else -> null
         }
 
-        webhookRepo.save(WebhookEvent(txid = txid, status = status, rawBody = rawBody))
+        // Log/auditoria
+        webhookRepo.save(
+            WebhookEvent(
+                txid = txid,
+                status = status,
+                chargeId = null,
+                provider = "PIX",
+                rawBody = rawBody,
+                receivedAt = OffsetDateTime.now()
+            )
+        )
+
         log.info("EFI WEBHOOK PARSED txid={}, status={}", txid, status)
         if (txid == null) return ResponseEntity.ok("⚠️ Ignorado: txid ausente")
 
