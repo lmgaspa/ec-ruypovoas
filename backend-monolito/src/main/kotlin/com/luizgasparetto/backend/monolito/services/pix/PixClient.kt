@@ -1,3 +1,4 @@
+// src/main/kotlin/com/luizgasparetto/backend/monolito/services/pix/PixClient.kt
 package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.JsonNode
@@ -9,7 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier
 import org.springframework.http.HttpEntity
 import org.springframework.http.HttpHeaders
 import org.springframework.http.HttpMethod
-import org.springframework.http.MediaType   // ✅ este import
+import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.client.RestTemplate
 
@@ -27,7 +28,7 @@ class PixClient(
 
     fun getCobranca(txid: String): JsonNode {
         val url = "${baseUrl()}/v2/cob/$txid"
-        val token = auth.getAccessToken()
+        val token = auth.getAccessToken(EfiAuthService.Api.PIX)
         val headers = HttpHeaders().apply { setBearerAuth(token) }
         val res = rt.exchange(url, HttpMethod.GET, HttpEntity<Void>(headers), String::class.java)
         val body = res.body ?: "{}"
@@ -36,7 +37,7 @@ class PixClient(
 
     fun cancel(txid: String): Boolean {
         val url = "${baseUrl()}/v2/cob/$txid"
-        val token = auth.getAccessToken()
+        val token = auth.getAccessToken(EfiAuthService.Api.PIX)
         val headers = HttpHeaders().apply {
             contentType = MediaType.APPLICATION_JSON
             setBearerAuth(token)
@@ -45,7 +46,7 @@ class PixClient(
         val body = mapOf("status" to "REMOVIDA_PELO_USUARIO_RECEBEDOR")
         val res = rt.exchange(url, HttpMethod.PATCH, HttpEntity(body, headers), String::class.java)
         return res.statusCode.is2xxSuccessful
-    } // ✅ fecha a função aqui
+    }
 
     fun status(txid: String): String? =
         getCobranca(txid).path("status").asText(null)

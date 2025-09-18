@@ -1,3 +1,4 @@
+// src/main/kotlin/com/luizgasparetto/backend/monolito/services/pix/PixService.kt
 package com.luizgasparetto.backend.monolito.services.pix
 
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -28,7 +29,7 @@ class PixService(
         descricao: String,
         txid: String
     ): PixCobrancaResponse {
-        val token = auth.getAccessToken()
+        val token = auth.getAccessToken(EfiAuthService.Api.PIX)
         val base = if (props.sandbox) "https://pix-h.api.efipay.com.br" else "https://pix.api.efipay.com.br"
 
         val valorStr = valor.setScale(2, RoundingMode.HALF_UP).toPlainString()
