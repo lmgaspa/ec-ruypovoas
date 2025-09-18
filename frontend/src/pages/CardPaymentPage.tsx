@@ -79,11 +79,9 @@ function formatMonthStrict(value: string): string {
   return d;
 }
 
+// >>> Correção: NÃO faz expansão automática de "20" -> "2020" durante a digitação
 function formatYearYYYY(value: string): string {
-  // força YYYY
-  let d = value.replace(/\D/g, "").slice(0, 4);
-  if (d.length === 2) d = `20${d}`;
-  return d;
+  return value.replace(/\D/g, "").slice(0, 4); // aceita livremente até 4 dígitos
 }
 
 function formatCvv(value: string, brand: BrandUI): string {
@@ -127,7 +125,7 @@ interface CardData {
   number: string;
   holderName: string;
   expirationMonth: string; // "MM"
-  expirationYear: string;  // "YYYY"
+  expirationYear: string;  // "YYYY" (ou "YY" durante digitação; normalizamos no blur/envio)
   cvv: string;             // 3/4
   brand: BrandUI;
 }
@@ -251,6 +249,10 @@ export default function CardPaymentPage() {
   const onChangeYear = (e: React.ChangeEvent<HTMLInputElement>) => {
     setCard((prev) => ({ ...prev, expirationYear: formatYearYYYY(e.target.value) }));
   };
+  // Normaliza "YY" -> "20YY" apenas quando o campo perde foco (não trava na digitação)
+  const onBlurYear = () => {
+    setCard(prev => ({ ...prev, expirationYear: toYYYY(prev.expirationYear) }));
+  };
   const onChangeCvv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const b = brand;
     setCard((prev) => ({ ...prev, cvv: formatCvv(e.target.value, b) }));
@@ -266,7 +268,7 @@ export default function CardPaymentPage() {
     /^\d{2}$/.test(card.expirationMonth) &&
     Number(card.expirationMonth) >= 1 &&
     Number(card.expirationMonth) <= 12;
-  const yearOk = /^\d{4}$/.test(card.expirationYear); // YYYY obrigatório
+  const yearOk = /^\d{4}$/.test(card.expirationYear); // YYYY obrigatório no estado final
   const cvvOk = new RegExp(`^\\d{${cvvLen}}$`).test(card.cvv);
 
   const holderDocument = (form.cpf ?? "").replace(/\D/g, "");
@@ -297,7 +299,7 @@ export default function CardPaymentPage() {
         number: numberDigits,
         cvv: card.cvv,
         expirationMonth: card.expirationMonth,
-        expirationYear: toYYYY(card.expirationYear), // garante YYYY
+        expirationYear: toYYYY(card.expirationYear), // garante YYYY no envio
         holderName: card.holderName,
         holderDocument,
         reuse: false,
@@ -395,6 +397,7 @@ export default function CardPaymentPage() {
         <input
           value={card.expirationYear}
           onChange={onChangeYear}
+          onBlur={onBlurYear}
           placeholder="AAAA"
           className="border p-2 w-1/2 mb-2 rounded"
           inputMode="numeric"
