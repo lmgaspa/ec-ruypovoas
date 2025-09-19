@@ -12,6 +12,7 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.math.BigDecimal
+import java.math.RoundingMode
 import java.time.OffsetDateTime
 import java.util.UUID
 
@@ -22,10 +23,10 @@ class CardCheckoutService(
     private val bookService: BookService,
     private val cardService: CardService,
     private val processor: CardPaymentProcessor,
-    private val cardWatcher: CardWatcher? = null                 // opcional
+    private val cardWatcher: CardWatcher? = null
 ) {
     private val log = LoggerFactory.getLogger(CardCheckoutService::class.java)
-    private val reserveTtlSeconds: Long = 900 // 15 min (pode externalizar)
+    private val reserveTtlSeconds: Long = 900 // 15 min
 
     fun processCardCheckout(request: CardCheckoutRequest): CardCheckoutResponse {
         // 0) valida estoque e total no servidor
@@ -41,14 +42,27 @@ class CardCheckoutService(
         }
         reserveItemsTx(order, reserveTtlSeconds)
 
-        // 2) montar itens e dados do cliente para Efí
+        // 2) montar itens / cliente / frete para Efí
+        fun BigDecimal.toCents(): Int =
+            this.setScale(2, RoundingMode.HALF_UP).multiply(BigDecimal(100)).toBigInteger().toInt()
+
         val itemsForEfi = request.cartItems.map {
             mapOf(
                 "name" to it.title,
-                "value" to (it.price.toBigDecimal().multiply(BigDecimal(100)).toBigInteger().toInt()),
+                "value" to it.price.toBigDecimal().toCents(),
                 "amount" to it.quantity
             )
         }
+        val shippingsForEfi =
+            if (request.shipping > 0.0)
+                listOf(
+                    mapOf(
+                        "name" to "Frete",
+                        "value" to request.shipping.toBigDecimal().toCents()
+                    )
+                )
+            else emptyList()
+
         val customer = mapOf(
             "name" to "${request.firstName} ${request.lastName}",
             "cpf" to request.cpf.filter { it.isDigit() },
@@ -56,8 +70,42 @@ class CardCheckoutService(
             "phone_number" to request.phone.filter { it.isDigit() }.ifBlank { null }
         )
 
+        // (apenas log) checagem de consistência local
+        val somaItens = request.cartItems.fold(BigDecimal.ZERO) { acc, it ->
+            acc + it.price.toBigDecimal() * BigDecimal(it.quantity)
+        }
+        val esperado = somaItens + request.shipping.toBigDecimal()
+        if (esperado.compareTo(totalAmount.setScale(2, RoundingMode.HALF_UP)) != 0) {
+            log.warn(
+                "CARD ONE-STEP: soma dos itens ({}) + frete ({}) difere do total informado ({}).",
+                somaItens.setScale(2, RoundingMode.HALF_UP),
+                request.shipping.toBigDecimal().setScale(2, RoundingMode.HALF_UP),
+                totalAmount.setScale(2, RoundingMode.HALF_UP)
+            )
+        }
+
         // 3) cobrança cartão (one-step)
         val result = try {
+            val body = buildMap<String, Any> {
+                put("items", itemsForEfi)
+                if (shippingsForEfi.isNotEmpty()) put("shippings", shippingsForEfi)
+                put(
+                    "payment", mapOf(
+                        "credit_card" to mapOf(
+                            "payment_token" to request.paymentToken,
+                            "installments" to request.installments.coerceAtLeast(1),
+                            "customer" to customer.filterValues { it != null }
+                        )
+                    )
+                )
+                put(
+                    "metadata", mapOf(
+                        "custom_id" to txid
+                        // se quiser: "notification_url" to "https://SEU_HOST/api/efi-webhook/card"
+                    )
+                )
+            }
+
             cardService.createOneStepCharge(
                 totalAmount = totalAmount,
                 items = itemsForEfi,
@@ -78,7 +126,7 @@ class CardCheckoutService(
             )
         }
 
-        // ⛔ se não houve criação de cobrança, não siga adiante com “processamento”
+        // ⛔ sem chargeId -> não prossegue
         if (result.chargeId.isNullOrBlank()) {
             log.warn("CARD: cobrança não criada (sem chargeId). status={}, orderId={}", result.status, order.id)
             releaseReservationTx(order.id!!)

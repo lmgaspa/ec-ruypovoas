@@ -28,26 +28,34 @@ class CardService(
         }
     }
 
-    /** One-step: cria e tenta capturar a cobrança em uma única chamada. */
+    /**
+     * One-step: cria e tenta capturar a cobrança em uma única chamada.
+     * `items` deve estar em centavos (value) e `amount` é a quantidade.
+     */
     fun createOneStepCharge(
-        totalAmount: BigDecimal,                 // usado só para conferência/log
-        items: List<Map<String, Any>>,           // cada item: name, value(em centavos), amount
+        totalAmount: BigDecimal,
+        items: List<Map<String, Any>>,
         paymentToken: String,
         installments: Int,
         customer: Map<String, Any?>,
-        txid: String
+        txid: String,
+        // frete em centavos (opcional). Se você já incluiu um item "Frete" em `items`, pode deixar null.
+        shippingCents: Int? = null
     ): CardChargeResult {
+        // soma dos itens (centavos)
+        val itemsTotalCents = items.sumOf { (it["value"] as Number).toInt() * (it["amount"] as Number).toInt() }
+        val totalCents = totalAmount.setScale(2, RoundingMode.HALF_UP).multiply(BigDecimal(100)).toInt()
 
-        // (opcional) confere soma dos itens x totalAmount, só para log
-        val expectedCents = totalAmount.setScale(2, RoundingMode.HALF_UP)
-            .multiply(BigDecimal(100)).toBigInteger().toInt()
-        val itemsSum = items.sumOf { (it["value"] as Number).toInt() * ((it["amount"] as? Number)?.toInt() ?: 1) }
-        if (itemsSum != expectedCents) {
-            log.warn("CARD ONE-STEP: soma dos itens ({}) difere do total informado ({}).", itemsSum, expectedCents)
+        if (itemsTotalCents != totalCents) {
+            log.warn(
+                "CARD ONE-STEP: soma dos itens ({}) difere do total informado ({}). " +
+                        "A Efí usa o somatório dos itens para calcular a transação.",
+                itemsTotalCents, totalCents
+            )
         }
 
-        // **IMPORTANTE**: no one-step NÃO existe "amount" no root
-        val body = mapOf(
+        // monta o corpo da Efí
+        val body = mutableMapOf<String, Any>(
             "items" to items,
             "payment" to mapOf(
                 "credit_card" to mapOf(
@@ -58,12 +66,23 @@ class CardService(
             ),
             "metadata" to mapOf(
                 "custom_id" to txid
-                // "notification_url" to "https://SEU_HOST/api/efi-webhook/card" // se quiser receber webhook do cartão
+                // "notification_url" -> "https://SEU_HOST/api/efi-webhook/card"  // se quiser
             )
         )
 
+        // se quiser enviar o frete no campo próprio (alternativo a criar um item "Frete")
+        if (shippingCents != null && shippingCents > 0) {
+            body["shippings"] = listOf(
+                mapOf(
+                    "name" to "Frete",
+                    "value" to shippingCents
+                )
+            )
+        }
+
         val json: JsonNode = client.oneStep(body)
-        val data = json.path("data") // respostas da Efí vêm dentro de "data"
+        // Respostas da Efí vêm em `data`
+        val data = json.path("data")
         val status = data.path("status").asText("").uppercase()
         val chargeId = data.path("charge_id").asText(null)
 
@@ -75,14 +94,14 @@ class CardService(
         )
     }
 
-    /** Consulta status por charge_id. */
+    /** Consulta status por charge_id (retorna, por exemplo, APPROVED, PAID etc.) */
     fun getChargeStatus(chargeId: String): String? {
         val json = client.getCharge(chargeId)
         val data = json.path("data")
         return data.path("status").asText(null)
     }
 
-    /** Cancela/void/refunda a cobrança (dependendo do estágio). */
+    /** Cancela/void/refunda a cobrança (dependendo do estágio) e retorna true se 2xx. */
     fun cancelCharge(chargeId: String): Boolean =
         client.cancel(chargeId)
 }
