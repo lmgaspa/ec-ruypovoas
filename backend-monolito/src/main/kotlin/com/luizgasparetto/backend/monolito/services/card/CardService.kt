@@ -30,7 +30,10 @@ class CardService(
 
     /**
      * One-step: cria e tenta capturar a cobrança em uma única chamada.
-     * `items` deve estar em centavos (value) e `amount` é a quantidade.
+     *
+     * @param shippingCents valor do frete em centavos (opcional)
+     * @param addShippingAsItem se true, envia o frete como um item "Frete".
+     *                          se false (padrão), utiliza o campo `shippings`.
      */
     fun createOneStepCharge(
         totalAmount: BigDecimal,
@@ -39,24 +42,32 @@ class CardService(
         installments: Int,
         customer: Map<String, Any?>,
         txid: String,
-        // frete em centavos (opcional). Se você já incluiu um item "Frete" em `items`, pode deixar null.
-        shippingCents: Int? = null
+        shippingCents: Int? = null,
+        addShippingAsItem: Boolean = false
     ): CardChargeResult {
-        // soma dos itens (centavos)
-        val itemsTotalCents = items.sumOf { (it["value"] as Number).toInt() * (it["amount"] as Number).toInt() }
+        // validação de consistência simples
+        val itemsSumCents = items.sumOf { (it["value"] as Number).toInt() * (it["amount"] as Number).toInt() }
         val totalCents = totalAmount.setScale(2, RoundingMode.HALF_UP).multiply(BigDecimal(100)).toInt()
-
-        if (itemsTotalCents != totalCents) {
+        if (itemsSumCents + (shippingCents ?: 0) != totalCents) {
             log.warn(
-                "CARD ONE-STEP: soma dos itens ({}) difere do total informado ({}). " +
-                        "A Efí usa o somatório dos itens para calcular a transação.",
-                itemsTotalCents, totalCents
+                "CARD ONE-STEP: soma dos itens ({}) + frete ({}) difere do total informado ({}).",
+                itemsSumCents, (shippingCents ?: 0), totalCents
             )
         }
 
-        // monta o corpo da Efí
+        // monta lista de itens (podemos acrescentar Frete como item, se desejado)
+        val itemsMut = items.toMutableList()
+        if (addShippingAsItem && (shippingCents ?: 0) > 0) {
+            itemsMut += mapOf(
+                "name" to "Frete",
+                "value" to shippingCents!!,
+                "amount" to 1
+            )
+        }
+
+        // corpo base
         val body = mutableMapOf<String, Any>(
-            "items" to items,
+            "items" to itemsMut,
             "payment" to mapOf(
                 "credit_card" to mapOf(
                     "payment_token" to paymentToken,
@@ -64,24 +75,21 @@ class CardService(
                     "customer" to customer.filterValues { it != null }
                 )
             ),
-            "metadata" to mapOf(
-                "custom_id" to txid
-                // "notification_url" -> "https://SEU_HOST/api/efi-webhook/card"  // se quiser
-            )
+            "metadata" to mapOf("custom_id" to txid)
         )
 
-        // se quiser enviar o frete no campo próprio (alternativo a criar um item "Frete")
-        if (shippingCents != null && shippingCents > 0) {
+        // se NÃO for como item, envia no campo `shippings`
+        if (!addShippingAsItem && (shippingCents ?: 0) > 0) {
             body["shippings"] = listOf(
                 mapOf(
                     "name" to "Frete",
-                    "value" to shippingCents
+                    "value" to shippingCents!!
                 )
             )
         }
 
+        // importante: NÃO enviar campo "amount" no root (a API rejeita).
         val json: JsonNode = client.oneStep(body)
-        // Respostas da Efí vêm em `data`
         val data = json.path("data")
         val status = data.path("status").asText("").uppercase()
         val chargeId = data.path("charge_id").asText(null)
@@ -94,14 +102,14 @@ class CardService(
         )
     }
 
-    /** Consulta status por charge_id (retorna, por exemplo, APPROVED, PAID etc.) */
+    /** Consulta status por charge_id. */
     fun getChargeStatus(chargeId: String): String? {
         val json = client.getCharge(chargeId)
         val data = json.path("data")
         return data.path("status").asText(null)
     }
 
-    /** Cancela/void/refunda a cobrança (dependendo do estágio) e retorna true se 2xx. */
+    /** Cancela/void/refunda a cobrança (dependendo do estágio). */
     fun cancelCharge(chargeId: String): Boolean =
         client.cancel(chargeId)
 }
