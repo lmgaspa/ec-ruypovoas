@@ -1,4 +1,4 @@
-📚 Ecommerce Editora Nosso Lar Books - Fullstack
+📚 Ecommerce Ruy Póvoas Books - Fullstack
 
 This is the fullstack service for the AG Books online store. It handles:
 
