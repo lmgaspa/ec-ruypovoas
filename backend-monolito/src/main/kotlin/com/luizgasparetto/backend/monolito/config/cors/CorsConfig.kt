@@ -15,8 +15,8 @@ class CorsConfig {
             // SSE: só GET neste prefixo
             registry.addMapping("/api/orders/**")
                 .allowedOriginPatterns( // aceita variações de subdomínio
-                    "https://www.editoranossolar.com.br",
-                    "https://editoranossolar.com.br",
+                    "https://www.ec-ruypovoas.vercel.app",
+                    "https://ec-ruypovoas.vercel.app",
                     "http://localhost:5173"
                 )
                 .allowedMethods("GET")
@@ -28,8 +28,8 @@ class CorsConfig {
             // (Opcional) REST comum
             registry.addMapping("/api/**")
                 .allowedOriginPatterns(
-                    "https://www.editoranossolar.com.br",
-                    "https://editoranossolar.com.br",
+                    "https://www.ec-ruypovoas.vercel.app",
+                    "https://ec-ruypovoas.vercel.app",
                     "http://localhost:5173"
                 )
                 .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")

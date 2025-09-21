@@ -25,7 +25,7 @@ Java Mail Sender
 
 Heroku (deployment)
 
-Swagger: https://ecommerceag-6fa0e6a5edbf.herokuapp.com/swagger-ui/index.html
+Swagger: https://ec-ruypovoas-3a960fbc9198.herokuapp.com/swagger-ui/index.html
 
 📬 Contact
 

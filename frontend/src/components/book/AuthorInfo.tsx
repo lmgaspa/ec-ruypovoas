@@ -10,7 +10,7 @@ const AuthorInfo: React.FC<AuthorInfoProps> = ({ author }) => {
         <div>
           <h2 className="text-2xl font-bold text-primary mb-4">{author}</h2>
           <p className="text-lg text-text-secondary leading-relaxed">
-            A Editora Nosso Lar é uma empresa de livros espiritas fundadas em 2013. Recentemente, atualizamos nosso ecomercce para melhor atender os nossos clientes.
+            A Ruy do Carmo Póvoas é uma empresa de livros espiritas fundadas em 2013. Recentemente, atualizamos nosso ecomercce para melhor atender os nossos clientes.
           </p>
         </div>
       </div>
