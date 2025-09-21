@@ -1,4 +1,4 @@
-const BASE_URL = "https://editoranossolar-3fd4fdafdb9e.herokuapp.com".replace(/\/+$/, "");
+const BASE_URL = "https://ec-ruypovoas-3a960fbc9198.herokuapp.com".replace(/\/+$/, "");
 
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { credentials: "omit" });

@@ -51,7 +51,7 @@ const EFI_ENV: "production" | "sandbox" = import.meta.env.PROD ? "production" : 
 
 const API_BASE =
   ((import.meta as unknown as { env?: { VITE_API_BASE?: string } }).env?.VITE_API_BASE) ??
-  "https://editoranossolar-3fd4fdafdb9e.herokuapp.com";
+  "https://ec-ruypovoas-3a960fbc9198.herokuapp.com";
 
 /* ---------- Helpers de formatação ---------- */
 function formatCardNumber(value: string, brand: BrandUI): string {
