@@ -32,4 +32,4 @@ Swagger: https://ecommerceag-6fa0e6a5edbf.herokuapp.com/swagger-ui/index.html
 email: luhmgasparetto@gmail.com
 whatsapp: +5571994105740
 
-Made with ❤️ by Luiz Gasparetto
+Made with ❤️ by Luiz Gasparetto# ec-ruypovoas
